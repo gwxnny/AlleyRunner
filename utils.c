@@ -1,25 +1,69 @@
-#include <math.h>
-#include "cprocessing.h"
+/*!
+@file       : utils.c
+@team       : IsaacACat
+@module     : CSD1401 Software Engineering Project 1
+@section    : section b
+@project    : Team Project 1 - Alley Runner
+@brief      : This file contains utility functions for the Alley Runner game.
+*//*________________________________________________________________________________*/
+#include "utils.h"
 
-int IsAreaClicked(float area_center_x, float area_center_y, float area_width, float area_height, float click_x, float click_y)
+int IsAreaClicked(
+    float area_center_x,
+    float area_center_y,
+    float area_width,
+    float area_height,
+    float click_x,
+    float click_y)
 {
-	float xmin = area_center_x - (area_width / 2);
-	float xmax = area_center_x + (area_width / 2);
+    float half_width = area_width / 2.0f;
+    float half_height = area_height / 2.0f;
 
-	float ymin = area_center_y - (area_height / 2);
-	float ymax = area_center_y + (area_height / 2);
+    float xmin = area_center_x - half_width;
+    float xmax = area_center_x + half_width;
 
-	if (click_x < xmax && click_x > xmin && click_y < ymax && click_y > ymin)
-	{
-		return 1;
-	}
-	return 0;
+    float ymin = area_center_y - half_height;
+    float ymax = area_center_y + half_height;
+
+    return (
+        click_x >= xmin &&
+        click_x <= xmax &&
+        click_y >= ymin &&
+        click_y <= ymax
+        );
 }
 
-int IsCircleClicked(float circle_center_x, float circle_center_y, float diameter, float click_x, float click_y)
+int IsCircleClicked(
+    float circle_center_x,
+    float circle_center_y,
+    float diameter,
+    float click_x,
+    float click_y)
 {
-	if (fabs(click_x - circle_center_x) > (diameter / 2))return 0;
-	if (fabs(click_y - circle_center_y) > (diameter / 2))return 0;
-	return 1;
+    if (diameter < 0.0f) {
+        return 0;
+    }
+
+    float radius = diameter / 2.0f;
+
+    float dx = click_x - circle_center_x;
+    float dy = click_y - circle_center_y;
+
+    return dx * dx + dy * dy <= radius * radius;
 }
 
+float ClampFloat(
+    float value,
+    float min_value,
+    float max_value)
+{
+    if (value < min_value) {
+        return min_value;
+    }
+
+    if (value > max_value) {
+        return max_value;
+    }
+
+    return value;
+}

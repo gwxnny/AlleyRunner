@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="AlleyRunner/AlleyRunner.vcxproj" Id="0e0afee7-c4db-4d34-8fdb-717f9f0fae29" />
+</Solution>
