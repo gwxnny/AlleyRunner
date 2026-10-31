@@ -1,16 +1,2 @@
-﻿  game.c
-C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\game.c(1062,23): warning C4047: 'function': 'CP_Sound' differs in levels of indirection from 'CP_Sound *'
-C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\game.c(1062,23): warning C4024: 'CP_Sound_Free': different types for formal and actual parameter 1
-C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\game.c(1068,23): warning C4047: 'function': 'CP_Sound' differs in levels of indirection from 'CP_Sound *'
-C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\game.c(1068,23): warning C4024: 'CP_Sound_Free': different types for formal and actual parameter 1
-C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\game.c(1074,23): warning C4047: 'function': 'CP_Sound' differs in levels of indirection from 'CP_Sound *'
-C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\game.c(1074,23): warning C4024: 'CP_Sound_Free': different types for formal and actual parameter 1
-  main.c
-  mainmenu.c
-C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\mainmenu.c(1105,23): warning C4047: 'function': 'CP_Sound' differs in levels of indirection from 'CP_Sound *'
-C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\mainmenu.c(1105,23): warning C4024: 'CP_Sound_Free': different types for formal and actual parameter 1
-C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\mainmenu.c(1110,23): warning C4047: 'function': 'CP_Sound' differs in levels of indirection from 'CP_Sound *'
-C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\mainmenu.c(1110,23): warning C4024: 'CP_Sound_Free': different types for formal and actual parameter 1
-  utils.c
-  Generating Code...
+﻿  mainmenu.c
   AlleyRunner.vcxproj -> C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\x64\Debug\AlleyRunner.exe

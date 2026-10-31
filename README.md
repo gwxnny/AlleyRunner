@@ -40,12 +40,12 @@ A three-lane endless runner where a bowling pin flees a giant bowling ball. Dodg
 
 ### Gwen
 
-- [ ] **UI / Menus — Main Menu:** Implement and test Play, How to Play, Options, and Exit, including menu music, click sounds, and Music/SFX sliders.
+- [x] **UI / Menus — Main Menu:** Implement and test Play, How to Play, Options, and Exit, including menu music, click sounds, and Music/SFX sliders.
 - [ ] **Collision + Health — Barrier Collision:** Apply 1-heart damage on an ordinary barrier hit; respect active Shield and Unkillable effects.
 - [ ] **Obstacles — Barrier:** Add the barrier obstacle asset, spawning, rendering, and a hitbox aligned with its visible shape.
 - [ ] **Obstacles — Oil Spill:** Add the oil-spill obstacle, visual feedback, and contact detection; integrate with Isaac's random-lane behavior.
 - [ ] **Obstacles — Hole in Ground:** Add the hole obstacle asset, spawning, rendering, and detection hook for Isaac's death behavior.
-- [ ] **Distractions — Ragebait Words:** Show large moving text in unpredictable, brief bursts with quiet periods; keep it independent of physical obstacles and hide it during death/menu screens.
+- [x] **Distractions — Ragebait Words:** Show large moving text in unpredictable, brief bursts with quiet periods; keep it independent of physical obstacles and hide it during death/menu screens.
 
 ### Isaac
 
