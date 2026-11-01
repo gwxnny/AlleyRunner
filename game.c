@@ -37,12 +37,17 @@ static CP_Sound sndDeath = NULL;
 #define OBS_DRAW_W 192.0f
 #define OBS_DRAW_H 192.0f
 
+/* Original window height used to design the obstacle sizes. */
+#define BASE_GAME_HEIGHT 720.0f
+static float gameScale = 1.0f;
+
 /* Sprite-sheet frame dimensions. */
 #define PLAYER_W 120.0f
 #define PLAYER_H 120.0f
 
 #define ENEMY_W 500.0f
 #define ENEMY_H 500.0f
+#define BALL_Y_OFFSET 140.0f
 
 #define GRAB_W 288.0f
 #define GRAB_H 192.0f
@@ -74,7 +79,7 @@ static CP_Font rageFont = NULL;
 #define RAGE_QUIET_MAX_MS 22000
 
 #define RAGE_EVENT_DURATION 6.0f
-#define RAGE_DRAW_SIZE 46.0f
+#define RAGE_DRAW_SIZE 64.0f
 #define RAGE_ROWS 20
 #define RAGE_PHRASES_PER_ROW 8
 #define RAGE_PHRASE_GAP 0.0f
@@ -179,6 +184,7 @@ static CP_Font deathFont = NULL;
 static int distance = 0;
 static float score = 0.0f;
 static float distanceTimer = 0.0f;
+static int highScore = 0;
 
 static const float pinYOffset[NUM_LANES] =
 {
@@ -187,11 +193,19 @@ static const float pinYOffset[NUM_LANES] =
     -50.0f
 };
 
-static const float obsYOffset[NUM_LANES] =
+//static const float obsYOffset[NUM_LANES] =
+//{
+//    120.0f,
+//    65.0f,
+//    10.0f
+//};
+
+// smaller value = higher on the screen, larger value = lower on the screen.
+static const float obstacleLaneCenter[NUM_LANES] =
 {
-    120.0f,
-    65.0f,
-    10.0f
+    0.28f,  // top lane
+    0.55f,  // middle lane
+    0.82f   // bottom lane
 };
 
 /* Obstacles. */
@@ -253,9 +267,21 @@ void Anim_Reset(Animation* a)
 
 void Anim_Update(Animation* a)
 {
+    if (a->frameTime <= 0.0f || a->frameCount <= 0)
+    {
+        return;
+    }
+
+	// if the animation is not looping and has reached the last frame, do not continue updating the frame index.
+    if (!a->loop &&
+        a->currentFrame == a->frameCount - 1)
+    {
+        return;
+    }
+
     a->timer += CP_System_GetDt();
 
-    if (a->timer >= a->frameTime)
+    while (a->timer >= a->frameTime)
     {
         a->timer -= a->frameTime;
         a->currentFrame++;
@@ -269,6 +295,8 @@ void Anim_Update(Animation* a)
             else
             {
                 a->currentFrame = a->frameCount - 1;
+                a->timer = 0.0f;
+                break;
             }
         }
     }
@@ -307,15 +335,36 @@ float LaneGround(int l)
     return top_lane_y + (float)l * lane_gap + FEET_OFFSET;
 }
 
+static float PinFeetY(int laneIndex)
+{
+	// keep bottom lane aligned with the bottom of the screen, and scale the other lanes.
+    float bottomFeet =
+        top_lane_y +
+        (float)(NUM_LANES - 1) * lane_gap +
+        (
+            FEET_OFFSET +
+            pinYOffset[NUM_LANES - 1]
+            ) * gameScale;
+
+    float laneDifference =
+        obstacleLaneCenter[laneIndex] -
+        obstacleLaneCenter[NUM_LANES - 1];
+
+    return bottomFeet + (float)height * laneDifference;
+}
+
 // x is the obstacle's left edge; ground is its bottom edge.
-static void DrawObstacle(int type, float x, float ground)
+static void DrawObstacle(int type, float x, int laneIndex)
 {
     Animation* a = &obsAnim[type];
+
+    float centerY =
+        (float)height * obstacleLaneCenter[laneIndex];
 
     Anim_Draw(
         a,
         x + a->drawW / 2.0f,
-        ground - a->drawH / 2.0f
+        centerY
     );
 }
 
@@ -323,6 +372,11 @@ static void RandomiseObstacle(int i)
 {
     obs_type[i] = CP_Random_RangeInt(0, NUM_OBS_TYPES - 1);
     obs_lane[i] = CP_Random_RangeInt(0, NUM_LANES - 1);
+}
+
+int Game_GetHighScore(void)
+{
+    return highScore;
 }
 
 void StartRun(void)
@@ -337,7 +391,7 @@ void StartRun(void)
     distanceTimer = 0.0f;
 
     enemyX = (float)width * 0.12f;
-    enemyGround = LaneGround(lane);
+    enemyGround = PinFeetY(lane);
 
     Anim_Reset(&runAnim);
     Anim_Reset(&chaseAnim);
@@ -427,6 +481,13 @@ static void RageOverlay_Draw(void)
     float screenW = (float)CP_System_GetWindowWidth();
     float screenH = (float)CP_System_GetWindowHeight();
 
+	// scale the text size based on the smaller of the width and height ratios to maintain aspect ratio
+    float textScale = fminf(
+        screenW / 1280.0f,
+        screenH / 720.0f
+    );
+
+    float drawSize = RAGE_DRAW_SIZE * textScale;
     float elapsed = RAGE_EVENT_DURATION - rageEventTimer;
     float progress = elapsed / RAGE_EVENT_DURATION;
 
@@ -449,7 +510,7 @@ static void RageOverlay_Draw(void)
         CP_TEXT_ALIGN_V_MIDDLE
     );
 
-    CP_Settings_TextSize(RAGE_DRAW_SIZE);
+    CP_Settings_TextSize(drawSize);
 
     for (int row = 0; row < RAGE_ROWS; row++)
     {
@@ -460,11 +521,9 @@ static void RageOverlay_Draw(void)
             phrase < RAGE_PHRASES_PER_ROW;
             phrase++)
         {
-            int index =
-                (row * 5 + phrase * 7) % RAGE_WORD_COUNT;
+            int index = (row * 5 + phrase * 7) % RAGE_WORD_COUNT;
 
-            rowWidth +=
-                (float)strlen(rageWords[index]) * RAGE_DRAW_SIZE;
+            rowWidth += (float)strlen(rageWords[index]) * drawSize;
 
             rowWidth += RAGE_PHRASE_GAP;
         }
@@ -501,13 +560,11 @@ static void RageOverlay_Draw(void)
             phrase < RAGE_PHRASES_PER_ROW;
             phrase++)
         {
-            int index =
-                (row * 5 + phrase * 7) % RAGE_WORD_COUNT;
+            int index = (row * 5 + phrase * 7) % RAGE_WORD_COUNT;
 
             const char* text = rageWords[index];
 
-            float phraseWidth =
-                (float)strlen(text) * RAGE_DRAW_SIZE;
+            float phraseWidth = (float)strlen(text) * drawSize;
 
             if (x < screenW && x + phraseWidth >= 0.0f)
             {
@@ -530,6 +587,7 @@ static void RageOverlay_Draw(void)
 
 void Game_Init(void)
 {
+    CP_System_SetWindowTitle("ALLEY RUNNER - BUILD CHECK 123");
     CP_Settings_NoStroke();
 
     CP_Settings_ImageMode(CP_POSITION_CENTER);
@@ -538,9 +596,11 @@ void Game_Init(void)
     width = CP_System_GetWindowWidth();
     height = CP_System_GetWindowHeight();
 
+    /* Scale obstacles relative to the original 720-pixel height. */
+    gameScale = (float)height / BASE_GAME_HEIGHT;
+
     lane_gap = (float)height / 3.0f;
     top_lane_y = (float)height / 6.0f;
-
     player_x = (float)width * 0.4f;
 
     /* Rage overlay font. */
@@ -601,6 +661,25 @@ void Game_Init(void)
         0
     );
 
+    /* scale character display sizes with the window height. */
+    Anim_SetDrawSize(
+        &runAnim,
+        PLAYER_W * gameScale,
+        PLAYER_H * gameScale
+    );
+
+    Anim_SetDrawSize(
+        &chaseAnim,
+        ENEMY_W * gameScale,
+        ENEMY_H * gameScale
+    );
+
+    Anim_SetDrawSize(
+        &grabAnim,
+        GRAB_W * gameScale,
+        GRAB_H * gameScale
+    );
+
     /* Obstacle images. */
     for (int t = 0; t < NUM_OBS_TYPES; t++)
     {
@@ -614,18 +693,24 @@ void Game_Init(void)
             1
         );
 
+        // limit the obstacle height to 38% of a lane's height.
+        float obstacleHeight = lane_gap * 0.38f;
+        float obstacleWidth =
+            obstacleHeight * (OBS_SRC_W / OBS_SRC_H);
+
         Anim_SetDrawSize(
             &obsAnim[t],
-            OBS_DRAW_W,
-            OBS_DRAW_H
+            obstacleWidth,
+            obstacleHeight
         );
     }
 
-    /* Place obstacles beyond the right edge. */
+    /* Scale initial spacing along with the obstacle sizes. */
     for (int i = 0; i < MAX_OBS; i++)
     {
         obs_x[i] =
-            (float)width + (float)i * OBS_SPACING;
+            (float)width +
+            (float)i * OBS_SPACING * gameScale;
 
         RandomiseObstacle(i);
     }
@@ -675,7 +760,7 @@ static void Draw_World(void)
         DrawObstacle(
             obs_type[i],
             obs_x[i],
-            LaneGround(obs_lane[i]) + obsYOffset[obs_lane[i]]
+            obs_lane[i]
         );
     }
 
@@ -683,24 +768,28 @@ static void Draw_World(void)
     {
         Anim_Draw(
             &grabAnim,
-            enemyX + (GRAB_W / 2.0f - ENEMY_BODY_X),
-            enemyGround - GRAB_H / 2.0f
+            enemyX +
+            (GRAB_W / 2.0f - ENEMY_BODY_X) * gameScale,
+            enemyGround - grabAnim.drawH / 2.0f
         );
     }
     else
     {
+        float pinFeetY = PinFeetY(lane);
+
         Anim_Draw(
             &runAnim,
             player_x,
-            LaneGround(lane) +
-            pinYOffset[lane] -
-            PLAYER_H / 2.0f
+            pinFeetY - runAnim.drawH / 2.0f
         );
 
+		// keep the ball anchored at its existing position.
         Anim_Draw(
             &chaseAnim,
             enemyX,
-            enemyGround - ENEMY_H / 2.0f + 150.0f
+            enemyGround +
+            BALL_Y_OFFSET * gameScale -
+            chaseAnim.drawH / 2.0f
         );
     }
 
@@ -761,107 +850,133 @@ static void Draw_World(void)
 
 static void Draw_DeathScreen(void)
 {
-    if (deathFont != NULL)
-    {
-        CP_Font_Set(deathFont);
-    }
+    float screenW = (float)CP_System_GetWindowWidth();
+    float screenH = (float)CP_System_GetWindowHeight();
+
+    float centerX = screenW * 0.5f;
+    float centerY = screenH * 0.5f;
+
+    float uiScale = fminf(
+        screenW / 1280.0f,
+        screenH / 720.0f
+    );
+
+    float buttonW = 240.0f * uiScale;
+    float buttonH = 70.0f * uiScale;
+    float buttonGap = 30.0f * uiScale;
+
+    float restartX =
+        centerX - (buttonW + buttonGap) / 2.0f;
+
+    float menuX =
+        centerX + (buttonW + buttonGap) / 2.0f;
+
+    float buttonY = centerY + 60.0f * uiScale;
 
     CP_Settings_RectMode(CP_POSITION_CENTER);
     CP_Settings_NoStroke();
 
-    CP_Settings_Fill(
-        CP_Color_Create(0, 0, 0, 255)
+    /* Dim the frozen gameplay. */
+    CP_Settings_Fill(CP_Color_Create(0, 0, 0, 165));
+
+    CP_Graphics_DrawRect(
+        centerX,
+        centerY,
+        screenW,
+        screenH
     );
 
-    CP_Settings_TextSize(100.0f);
+    /* Centered menu panel. */
+    CP_Settings_Fill(CP_Color_Create(20, 20, 25, 245));
+
+    CP_Graphics_DrawRect(
+        centerX,
+        centerY,
+        620.0f * uiScale,
+        300.0f * uiScale
+    );
+
+    if (deathFont != NULL)
+    {
+        CP_Font_Set(deathFont);
+    }
 
     CP_Settings_TextAlignment(
         CP_TEXT_ALIGN_H_CENTER,
         CP_TEXT_ALIGN_V_MIDDLE
     );
 
-    CP_Font_DrawText("YOU DIED", 800.0f, 225.0f);
+    CP_Settings_TextSize(80.0f * uiScale);
+    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
+
+    CP_Font_DrawText(
+        "YOU DIED",
+        centerX,
+        centerY - 65.0f * uiScale
+    );
 
     /* Restart button. */
-    CP_Settings_Fill(
-        CP_Color_Create(100, 220, 100, 255)
-    );
+    CP_Settings_Fill(CP_Color_Create(100, 220, 100, 255));
 
     CP_Graphics_DrawRect(
-        RESTART_X,
-        BTN_Y,
-        BTN_W,
-        BTN_H
+        restartX,
+        buttonY,
+        buttonW,
+        buttonH
     );
 
-    CP_Settings_Fill(
-        CP_Color_Create(0, 0, 0, 255)
-    );
+    CP_Settings_Fill(CP_Color_Create(0, 0, 0, 255));
+    CP_Settings_TextSize(40.0f * uiScale);
 
-    CP_Settings_TextSize(80.0f);
+    CP_Font_DrawText("RESTART", restartX, buttonY);
 
-    CP_Font_DrawText(
-        "RESTART",
-        RESTART_X,
-        BTN_Y
-    );
-
-    /* Exit button. */
-    CP_Settings_Fill(
-        CP_Color_Create(255, 0, 0, 255)
-    );
+    /* Return-to-menu button. */
+    CP_Settings_Fill(CP_Color_Create(255, 80, 80, 255));
 
     CP_Graphics_DrawRect(
-        EXIT_X,
-        BTN_Y,
-        BTN_W,
-        BTN_H
+        menuX,
+        buttonY,
+        buttonW,
+        buttonH
     );
 
-    CP_Settings_Fill(
-        CP_Color_Create(0, 0, 0, 255)
-    );
+    CP_Settings_Fill(CP_Color_Create(0, 0, 0, 255));
 
-    CP_Settings_TextSize(100.0f);
+    CP_Font_DrawText("MAIN MENU", menuX, buttonY);
 
-    CP_Font_DrawText(
-        "EXIT",
-        EXIT_X,
-        BTN_Y
-    );
-
-    if (CP_Input_MouseClicked())
+    if (CP_Input_MouseTriggered(MOUSE_BUTTON_LEFT))
     {
         float mouseX = CP_Input_GetMouseX();
         float mouseY = CP_Input_GetMouseY();
 
-        if (IsAreaClicked(
-            RESTART_X,
-            BTN_Y,
-            BTN_W,
-            BTN_H,
-            mouseX,
-            mouseY))
+        bool overRestart =
+            fabsf(mouseX - restartX) <= buttonW / 2.0f &&
+            fabsf(mouseY - buttonY) <= buttonH / 2.0f;
+
+        bool overMenu =
+            fabsf(mouseX - menuX) <= buttonW / 2.0f &&
+            fabsf(mouseY - buttonY) <= buttonH / 2.0f;
+
+        if (overRestart)
         {
             CP_Engine_SetNextGameStateForced(
                 Game_Init,
                 Game_Update,
                 Game_Exit
             );
+
+            return;
         }
-        else if (IsAreaClicked(
-            EXIT_X,
-            BTN_Y,
-            BTN_W,
-            BTN_H,
-            mouseX,
-            mouseY))
+
+        if (overMenu)
         {
             CP_Engine_SetNextGameStateForced(
                 Main_Menu_Init,
                 Main_Menu_Update,
                 Main_Menu_Exit
             );
+
+            return;
         }
     }
 }
@@ -873,6 +988,23 @@ static void Draw_DeathScreen(void)
 void Game_Update(void)
 {
     float dt = CP_System_GetDt();
+
+    if (CP_Input_KeyTriggered(KEY_Q))
+    {
+        CP_Engine_SetNextGameStateForced(
+            Main_Menu_Init,
+            Main_Menu_Update,
+            Main_Menu_Exit
+        );
+
+        return;
+    }
+
+    if (CP_Input_KeyTriggered(KEY_ESCAPE))
+    {
+        CP_Engine_Terminate();
+        return;
+    }
 
     if (state == STATE_PLAYING)
     {
@@ -912,6 +1044,13 @@ void Game_Update(void)
 
         score += speed * dt / 100.0f;
 
+        int currentScore = (int)score;
+
+        if (currentScore > highScore)
+        {
+            highScore = currentScore;
+        }
+
         distanceTimer += dt;
 
         if (distanceTimer >= 1.0f)
@@ -934,10 +1073,12 @@ void Game_Update(void)
             float previousX = obs_x[i];
             float obsW = obsAnim[obs_type[i]].drawW;
 
-            obs_x[i] -= speed * dt;
+            //obs_x[i] -= speed * dt;
+			// convert base gameplay speed to screen pixels per second. (to have consistent gameplay speed across different window sizes)
+            obs_x[i] -= speed * gameScale * dt;
 
             /* swept collision check */ 
-            float playerHalfWidth = PLAYER_W * 0.30f;
+            float playerHalfWidth = runAnim.drawW * 0.30f;
             float playerLeft = player_x - playerHalfWidth;
             float playerRight = player_x + playerHalfWidth;
 
@@ -966,7 +1107,7 @@ void Game_Update(void)
 
                 obs_x[i] =
                     furthest +
-                    OBS_SPACING * (speed / START_SPEED);
+                    OBS_SPACING * gameScale * (speed / START_SPEED);
 
                 RandomiseObstacle(i);
             }
@@ -985,14 +1126,15 @@ void Game_Update(void)
     {
         Anim_Update(&chaseAnim);
 
-        float targetX = player_x - GRAB_REACH;
-        float targetY = LaneGround(lane);
+        float targetX = player_x - GRAB_REACH * gameScale;
+        float targetY = PinFeetY(lane);
 
         float dx = targetX - enemyX;
         float dy = targetY - enemyGround;
 
         float dist = sqrtf(dx * dx + dy * dy);
-        float step = ENEMY_WALK_SPEED * dt;
+        //float step = ENEMY_WALK_SPEED * dt;
+        float step = ENEMY_WALK_SPEED * gameScale * dt;
 
         if (dist <= step)
         {
@@ -1030,20 +1172,6 @@ void Game_Update(void)
     {
         Draw_DeathScreen();
     }
-
-    if (CP_Input_KeyDown(KEY_ESCAPE))
-    {
-        CP_Engine_Terminate();
-    }
-
-    if (CP_Input_KeyDown(KEY_Q))
-    {
-        CP_Engine_SetNextGameStateForced(
-            Main_Menu_Init,
-            Main_Menu_Update,
-            Main_Menu_Exit
-        );
-    }
 }
 
 /* ============================================================
@@ -1056,19 +1184,19 @@ void Game_Exit(void)
 
     if (sndJump != NULL)
     {
-        CP_Sound_Free(&sndJump);
+        CP_Sound_Free(sndJump);
         sndJump = NULL;
     }
 
     if (gameMusic != NULL)
     {
-        CP_Sound_Free(&gameMusic);
+        CP_Sound_Free(gameMusic);
         gameMusic = NULL;
     }
 
     if (sndDeath != NULL)
     {
-        CP_Sound_Free(&sndDeath);
+        CP_Sound_Free(sndDeath);
         sndDeath = NULL;
     }
 
