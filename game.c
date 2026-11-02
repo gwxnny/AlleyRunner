@@ -13,11 +13,13 @@
    ============================================================ */
 
 static CP_Sound sndJump = NULL;
+static CP_Sound sndCoin = NULL;
 static CP_Sound gameMusic = NULL;
 static CP_Sound sndDeath = NULL;
 
 #define JUMP_VOL  1.0f
 #define DEATH_VOL 1.0f
+#define COIN_VOL 1.0f
 
 /* ============================================================
    Gameplay settings
@@ -29,7 +31,7 @@ static CP_Sound sndDeath = NULL;
 #define NUM_OBS_TYPES 3
 #define OBS_SPACING   450.0f
 
-/* Obstacle source-image dimensions. */
+   /* Obstacle source-image dimensions. */
 #define OBS_SRC_W 700.0f
 #define OBS_SRC_H 500.0f
 
@@ -58,9 +60,49 @@ static float gameScale = 1.0f;
 #define ENEMY_WALK_SPEED 250.0f
 
 #define START_SPEED 800.0f
-#define SPEED_RAMP  20.0f
+#define SPEED_RAMP  10.0f
 
 #define FEET_OFFSET 80.0f
+
+/* ============================================================
+   Power-ups
+   ============================================================ */
+#define INVINCIBLE_TIME 5.0f
+#define SHIELD_TIME     10.0f
+#define MAGNET_TIME     8.0f
+
+#define PU_SPAWN_MIN    8.0f    /* seconds between power-up pickups */
+#define PU_SPAWN_MAX    15.0f
+#define PU_SIZE         70.0f
+#define PU_PICKUP_DIST  60.0f
+#define PU_FX_SIZE      190.0f  /* height of the effect drawn on the pin */
+
+   /* Mystery box (what the pickup looks like in the lane) and the item roulette. */
+#define BOX_FRAMES      4
+#define BOX_W           64.0f
+#define BOX_H           64.0f
+#define BOX_TIME        0.12f
+#define ROULETTE_TIME   1.5f    /* seconds the icons spin after the box is picked up */
+#define REVEAL_TIME     0.8f    /* seconds the final power-up stays shown */
+
+#define MAX_COINS         15
+#define COIN_PER_SPAWN 3   /* each spawn drops 1 to 3 coins in one lane */
+#define COIN_SPACING      70.0f
+#define COIN_SIZE         50.0f   /* drawn height */
+
+/* Coin sprite sheet: COIN_FRAMES frames side by side, each COIN_SRC_W x COIN_SRC_H. */
+#define COIN_FRAMES       6
+#define COIN_SRC_W        64.0f
+#define COIN_SRC_H        64.0f
+#define COIN_FRAME_TIME   0.10f
+#define COIN_SPAWN_MIN    3.0f
+#define COIN_SPAWN_MAX    6.0f
+#define COIN_COLLECT_DIST 60.0f
+#define COIN_SCORE        25
+
+#define MAGNET_RANGE      450.0f
+#define MAGNET_PULL_SPEED 1400.0f
+
 
 /* Death-screen layout. */
 #define BTN_W     300.0f
@@ -130,6 +172,21 @@ typedef enum
     STATE_GRAB
 } GameplayPhase;
 
+typedef enum
+{
+    OBS_BARRIER,
+    OBS_OIL,
+    OBS_HOLE
+} ObsKind;
+
+typedef enum
+{
+    PU_INVINCIBLE,
+    PU_SHIELD,
+    PU_MAGNET,
+    NUM_POWERUPS
+} PowerType;
+
 typedef struct
 {
     CP_Image sheet;
@@ -185,6 +242,38 @@ static int distance = 0;
 static float score = 0.0f;
 static float distanceTimer = 0.0f;
 static int highScore = 0;
+
+/* Power-up state. */
+static float invincibleTimer = 0.0f;
+static float shieldTimer = 0.0f;
+static float magnetTimer = 0.0f;
+
+/* Collectable power-up (one on screen at a time). */
+static bool pu_active = false;
+static float pu_x = 0.0f;
+static int pu_lane = 0;
+static int pu_type = 0;
+static float puSpawnTimer = 0.0f;
+
+/* Mystery box + roulette. */
+static Animation boxAnim;               /* the box in the lane */
+static float rouletteTimer = 0.0f;      /* > 0 while the icons are spinning */
+static float rouletteSwitch = 0.0f;     /* time until the icon changes */
+static int rouletteShown = 0;           /* icon currently shown in the slot */
+static int rouletteType = 0;            /* the real power-up being given */
+static float revealTimer = 0.0f;        /* > 0 while the final icon is shown */
+
+/* Coins. */
+static float coin_x[MAX_COINS];
+static float coin_y[MAX_COINS];
+static bool coin_active[MAX_COINS];
+static float coinSpawnTimer = 0.0f;
+static Animation coinAnim;
+
+/* Power-up sprite sheets. */
+static Animation puIconAnim[NUM_POWERUPS];  /* pickup icon in the lane */
+static Animation puFx[NUM_POWERUPS];        /* effect drawn on the pin */
+static int coinCount = 0;
 
 static const float pinYOffset[NUM_LANES] =
 {
@@ -272,7 +361,7 @@ void Anim_Update(Animation* a)
         return;
     }
 
-	// if the animation is not looping and has reached the last frame, do not continue updating the frame index.
+    // if the animation is not looping and has reached the last frame, do not continue updating the frame index.
     if (!a->loop &&
         a->currentFrame == a->frameCount - 1)
     {
@@ -337,7 +426,7 @@ float LaneGround(int l)
 
 static float PinFeetY(int laneIndex)
 {
-	// keep bottom lane aligned with the bottom of the screen, and scale the other lanes.
+    // keep bottom lane aligned with the bottom of the screen, and scale the other lanes.
     float bottomFeet =
         top_lane_y +
         (float)(NUM_LANES - 1) * lane_gap +
@@ -390,6 +479,25 @@ void StartRun(void)
     distance = 0;
     distanceTimer = 0.0f;
 
+    invincibleTimer = 0.0f;
+    shieldTimer = 0.0f;
+    magnetTimer = 0.0f;
+    coinCount = 0;
+
+    pu_active = false;
+    puSpawnTimer = CP_Random_RangeFloat(PU_SPAWN_MIN, PU_SPAWN_MAX);
+
+    rouletteTimer = 0.0f;
+    rouletteSwitch = 0.0f;
+    revealTimer = 0.0f;
+
+    for (int c = 0; c < MAX_COINS; c++)
+    {
+        coin_active[c] = false;
+    }
+
+    coinSpawnTimer = 2.0f;
+
     enemyX = (float)width * 0.12f;
     enemyGround = PinFeetY(lane);
 
@@ -414,6 +522,411 @@ static void KillPlayer(void)
     }
 
     CP_Sound_StopGroup(CP_SOUND_GROUP_MUSIC);
+}
+
+/* ============================================================
+   Power-up and coin helpers
+   ============================================================ */
+
+typedef struct
+{
+    const char* path;
+    int frames;
+    float w;            /* size of ONE frame in the PNG */
+    float h;
+    float frameTime;    /* seconds per frame */
+} SheetInfo;
+
+/* Pickup icons (the item sitting in the lane). Edit to match your art. */
+static const SheetInfo puIconInfo[NUM_POWERUPS] =
+{
+    { "../Assets/powerup_invincible.png", 4, 64.0f, 64.0f, 0.12f },
+    { "../Assets/powerup_shield.png",     4, 64.0f, 64.0f, 0.12f },
+    { "../Assets/powerup_magnet.png",     4, 64.0f, 64.0f, 0.12f }
+};
+
+/* Effects drawn on the pin (they all loop). */
+static const SheetInfo puFxInfo[NUM_POWERUPS] =
+{
+    { "../Assets/fx_invincible.png", 6, 128.0f, 128.0f, 0.10f },
+    { "../Assets/fx_shield.png",     6, 128.0f, 128.0f, 0.10f },
+    { "../Assets/fx_magnet.png",     6, 128.0f, 128.0f, 0.10f }
+};
+
+static const char* puLabels[NUM_POWERUPS] = { "I", "S", "M" };
+static const char* puNames[NUM_POWERUPS] = { "INVINCIBLE", "SHIELD", "MAGNET" };
+
+/* Send an obstacle back behind the furthest one (also used to "break" it). */
+static void RespawnObstacle(int i)
+{
+    float furthest = (float)width;
+
+    for (int j = 0; j < MAX_OBS; j++)
+    {
+        if (obs_x[j] > furthest)
+        {
+            furthest = obs_x[j];
+        }
+    }
+
+    obs_x[i] =
+        furthest +
+        OBS_SPACING * gameScale * (speed / START_SPEED);
+
+    RandomiseObstacle(i);
+}
+
+/* y of the pin's centre when it is in lane l. */
+static float PlayerCenterY(int l)
+{
+    return PinFeetY(l) - runAnim.drawH / 2.0f;
+}
+
+/* true if no obstacle in lane l is within margin pixels of x. */
+static bool LaneClearAt(float x, int l, float margin)
+{
+    for (int i = 0; i < MAX_OBS; i++)
+    {
+        if (obs_lane[i] != l)
+        {
+            continue;
+        }
+
+        float centre = obs_x[i] + obsAnim[obs_type[i]].drawW / 2.0f;
+
+        if (fabsf(centre - x) < margin)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static CP_Color PowerColor(int type, int alpha)
+{
+    unsigned char a = (unsigned char)alpha;
+
+    switch (type)
+    {
+    case PU_INVINCIBLE: return CP_Color_Create(255, 200, 0, a);
+    case PU_SHIELD:     return CP_Color_Create(80, 180, 255, a);
+    default:            return CP_Color_Create(170, 90, 255, a);
+    }
+}
+
+static void ApplyPowerUp(int type)
+{
+    switch (type)
+    {
+    case PU_INVINCIBLE: invincibleTimer = INVINCIBLE_TIME; break;
+    case PU_SHIELD:     shieldTimer = SHIELD_TIME;         break;
+    case PU_MAGNET:     magnetTimer = MAGNET_TIME;         break;
+    }
+}
+
+/* The pin picked up the mystery box: start the spinning icons. */
+static void StartRoulette(int type)
+{
+    rouletteType = type;
+    rouletteTimer = ROULETTE_TIME;
+    rouletteSwitch = 0.0f;
+    rouletteShown = CP_Random_RangeInt(0, NUM_POWERUPS - 1);
+    revealTimer = 0.0f;
+}
+
+static void TrySpawnPickup(void)
+{
+    for (int tries = 0; tries < 6; tries++)
+    {
+        int l = CP_Random_RangeInt(0, NUM_LANES - 1);
+        float x = (float)width + 100.0f * gameScale;
+
+        if (LaneClearAt(x, l, 300.0f * gameScale))
+        {
+            pu_active = true;
+            pu_x = x;
+            pu_lane = l;
+            pu_type = CP_Random_RangeInt(0, NUM_POWERUPS - 1);
+
+            puSpawnTimer =
+                CP_Random_RangeFloat(PU_SPAWN_MIN, PU_SPAWN_MAX);
+
+            return;
+        }
+    }
+
+    /* No clear lane right now: try again next frame. */
+}
+
+static void TrySpawnCoins(void)
+{
+    for (int tries = 0; tries < 6; tries++)
+    {
+        int l = CP_Random_RangeInt(0, NUM_LANES - 1);
+        int count = COIN_PER_SPAWN;
+        float x = (float)width + 100.0f * gameScale;
+        float rowCentre =
+            x + ((float)count * COIN_SPACING * gameScale) / 2.0f;
+
+        if (LaneClearAt(rowCentre, l, 400.0f * gameScale))
+        {
+            int placed = 0;
+
+            for (int c = 0; c < MAX_COINS && placed < count; c++)
+            {
+                if (!coin_active[c])
+                {
+                    coin_active[c] = true;
+                    coin_x[c] = x + (float)placed * COIN_SPACING * gameScale;
+                    coin_y[c] = PlayerCenterY(l);
+                    placed++;
+                }
+            }
+
+            coinSpawnTimer = CP_Random_RangeFloat(COIN_SPAWN_MIN, COIN_SPAWN_MAX);
+
+            return;
+        }
+    }
+}
+
+/* Called when the pin overlaps obstacle i. */
+static void HandleHit(int i)
+{
+    int type = obs_type[i];
+
+    /* Invincible: smashes barriers, drives through oil, but holes still kill. */
+    if (invincibleTimer > 0.0f && type != OBS_HOLE)
+    {
+        if (type == OBS_BARRIER)
+        {
+            RespawnObstacle(i);
+        }
+
+        return;
+    }
+
+    /* Shield: absorbs exactly one barrier hit. */
+    if (shieldTimer > 0.0f && type == OBS_BARRIER)
+    {
+        shieldTimer = 0.0f;
+        RespawnObstacle(i);
+        return;
+    }
+
+    /* No power-up protects against this obstacle: the player dies. */
+    KillPlayer();
+}
+
+/* Effect on the pin: the sprite sheet, or a plain circle if it's missing. */
+static void Draw_PowerFx(int type, float x, float y)
+{
+    if (puFx[type].sheet != NULL)
+    {
+        Anim_Draw(&puFx[type], x, y);
+        return;
+    }
+
+    switch (type)
+    {
+    case PU_INVINCIBLE:
+        CP_Settings_Fill(PowerColor(PU_INVINCIBLE, 90));
+        CP_Graphics_DrawCircle(x, y, 190.0f * gameScale);
+        break;
+
+    case PU_SHIELD:
+        CP_Settings_Fill(PowerColor(PU_SHIELD, 100));
+        CP_Graphics_DrawCircle(x, y, 160.0f * gameScale);
+        break;
+
+    case PU_MAGNET:
+        CP_Settings_Fill(PowerColor(PU_MAGNET, 70));
+        CP_Graphics_DrawCircle(x, y, 220.0f * gameScale);
+        break;
+
+    }
+}
+
+static void Draw_Pickups(void)
+{
+    CP_Settings_NoStroke();
+
+    CP_Settings_Fill(CP_Color_Create(255, 215, 0, 255));
+
+    for (int c = 0; c < MAX_COINS; c++)
+    {
+        if (!coin_active[c])
+        {
+            continue;
+        }
+
+        if (coinAnim.sheet != NULL)
+        {
+            Anim_Draw(&coinAnim, coin_x[c], coin_y[c]);
+        }
+        else
+        {
+            /* fallback if coin.png is missing */
+            CP_Graphics_DrawCircle(
+                coin_x[c],
+                coin_y[c],
+                COIN_SIZE * gameScale
+            );
+        }
+    }
+
+    if (pu_active)
+    {
+        float y = PlayerCenterY(pu_lane);
+
+        /* the real power-up stays hidden: every pickup looks like the same box */
+        if (boxAnim.sheet != NULL)
+        {
+            Anim_Draw(&boxAnim, pu_x, y);
+        }
+        else
+        {
+            /* fallback if the box sheet is missing: gold circle with a ? */
+            CP_Settings_Fill(CP_Color_Create(255, 200, 0, 255));
+            CP_Graphics_DrawCircle(pu_x, y, PU_SIZE * gameScale);
+
+            if (scoreFont != NULL)
+            {
+                CP_Font_Set(scoreFont);
+            }
+
+            CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
+            CP_Settings_TextSize(40.0f * gameScale);
+
+            CP_Settings_TextAlignment(
+                CP_TEXT_ALIGN_H_CENTER,
+                CP_TEXT_ALIGN_V_MIDDLE
+            );
+
+            CP_Font_DrawText("?", pu_x, y);
+        }
+    }
+}
+
+/* Draws a power-up icon (or a coloured circle with a letter if the sheet is missing). */
+static void Draw_PowerIcon(int type, float x, float y)
+{
+    if (puIconAnim[type].sheet != NULL)
+    {
+        Anim_Draw(&puIconAnim[type], x, y);
+        return;
+    }
+
+    CP_Settings_Fill(PowerColor(type, 255));
+    CP_Graphics_DrawCircle(x, y, PU_SIZE * gameScale);
+
+    if (scoreFont != NULL)
+    {
+        CP_Font_Set(scoreFont);
+    }
+
+    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
+    CP_Settings_TextSize(30.0f * gameScale);
+
+    CP_Settings_TextAlignment(
+        CP_TEXT_ALIGN_H_CENTER,
+        CP_TEXT_ALIGN_V_MIDDLE
+    );
+
+    CP_Font_DrawText(puLabels[type], x, y);
+}
+
+/* The item slot at the top-centre: icons spin, then land on the real power-up. */
+static void Draw_Roulette(void)
+{
+    if (state != STATE_PLAYING ||
+        (rouletteTimer <= 0.0f && revealTimer <= 0.0f))
+    {
+        return;
+    }
+
+    float x = (float)width / 2.0f;
+    float y = 90.0f * gameScale;
+    float boxSize = (PU_SIZE + 40.0f) * gameScale;
+
+    /* dark square behind the icon */
+    CP_Settings_RectMode(CP_POSITION_CENTER);
+    CP_Settings_Fill(CP_Color_Create(20, 20, 25, 220));
+    CP_Graphics_DrawRect(x, y, boxSize, boxSize);
+
+    Draw_PowerIcon(rouletteShown, x, y);
+
+    /* once the spin is over, show the name of what the player got */
+    if (revealTimer > 0.0f)
+    {
+        if (scoreFont != NULL)
+        {
+            CP_Font_Set(scoreFont);
+        }
+
+        CP_Settings_Fill(PowerColor(rouletteShown, 255));
+        CP_Settings_TextSize(24.0f * gameScale);
+
+        CP_Settings_TextAlignment(
+            CP_TEXT_ALIGN_H_CENTER,
+            CP_TEXT_ALIGN_V_MIDDLE
+        );
+
+        CP_Font_DrawText(
+            puNames[rouletteShown],
+            x,
+            y + boxSize / 2.0f + 25.0f * gameScale
+        );
+    }
+}
+
+static void Draw_HUD(void)
+{
+    char line[48];
+    //float y = 110.0f;
+
+    if (scoreFont != NULL)
+    {
+        CP_Font_Set(scoreFont);
+    }
+
+    CP_Settings_NoStroke();
+    CP_Settings_TextSize(25.0f);
+
+    CP_Settings_TextAlignment(
+        CP_TEXT_ALIGN_H_LEFT,
+        CP_TEXT_ALIGN_V_TOP
+    );
+
+    CP_Settings_Fill(CP_Color_Create(255, 215, 0, 255));
+    snprintf(line, sizeof(line), "COINS %d", coinCount);
+    CP_Font_DrawText(line, 220.0f, 30.0f);
+    //y += 30.0f;
+
+    if (invincibleTimer > 0.0f)
+    {
+        CP_Settings_Fill(PowerColor(PU_INVINCIBLE, 255));
+        snprintf(line, sizeof(line), "INVINCIBLE %.1f", invincibleTimer);
+        CP_Font_DrawText(line, 450.0f, 30.0f);
+        //y += 30.0f;
+    }
+
+    if (shieldTimer > 0.0f)
+    {
+        CP_Settings_Fill(PowerColor(PU_SHIELD, 255));
+        snprintf(line, sizeof(line), "SHIELD %.1f", shieldTimer);
+        CP_Font_DrawText(line, 450.0f, 30.0f);
+        //y += 30.0f;
+    }
+
+    if (magnetTimer > 0.0f)
+    {
+        CP_Settings_Fill(PowerColor(PU_MAGNET, 255));
+        snprintf(line, sizeof(line), "MAGNET %.1f", magnetTimer);
+        CP_Font_DrawText(line, 450.0f, 30.0f);
+        //y += 30.0f;
+    }
 }
 
 /* ============================================================
@@ -481,7 +994,7 @@ static void RageOverlay_Draw(void)
     float screenW = (float)CP_System_GetWindowWidth();
     float screenH = (float)CP_System_GetWindowHeight();
 
-	// scale the text size based on the smaller of the width and height ratios to maintain aspect ratio
+    // scale the text size based on the smaller of the width and height ratios to maintain aspect ratio
     float textScale = fminf(
         screenW / 1280.0f,
         screenH / 720.0f
@@ -616,18 +1129,13 @@ void Game_Init(void)
 
     /* Gameplay audio. */
     sndJump = CP_Sound_Load("../Assets/jump.mp3");
+    sndCoin = CP_Sound_Load("../Assets/coin_pickup.mp3");
     sndDeath = CP_Sound_Load("../Assets/game_over.mp3");
     gameMusic = CP_Sound_Load("../Assets/bg_music.mp3");
 
     if (gameMusic != NULL)
     {
-        CP_Sound_PlayAdvanced(
-            gameMusic,
-            1.0f,
-            1.0f,
-            true,
-            CP_SOUND_GROUP_MUSIC
-        );
+        CP_Sound_PlayAdvanced(gameMusic,1.0f,1.0f,true,CP_SOUND_GROUP_MUSIC);
     }
 
     // Updated character sprite sheets.
@@ -705,6 +1213,76 @@ void Game_Init(void)
         );
     }
 
+    /* Coin animation (one shared animation for every coin). */
+    Anim_Init(
+        &coinAnim,
+        "../Assets/coin.png",
+        COIN_FRAMES,
+        COIN_SRC_W,
+        COIN_SRC_H,
+        COIN_FRAME_TIME,
+        1
+    );
+
+    Anim_SetDrawSize(
+        &coinAnim,
+        COIN_SIZE * gameScale * (COIN_SRC_W / COIN_SRC_H),
+        COIN_SIZE * gameScale
+    );
+
+    /* Power-up icons and effects. */
+    for (int t = 0; t < NUM_POWERUPS; t++)
+    {
+        Anim_Init(
+            &puIconAnim[t],
+            puIconInfo[t].path,
+            puIconInfo[t].frames,
+            puIconInfo[t].w,
+            puIconInfo[t].h,
+            puIconInfo[t].frameTime,
+            1
+        );
+
+        Anim_SetDrawSize(
+            &puIconAnim[t],
+            PU_SIZE * gameScale * (puIconInfo[t].w / puIconInfo[t].h),
+            PU_SIZE * gameScale
+        );
+
+        Anim_Init(
+            &puFx[t],
+            puFxInfo[t].path,
+            puFxInfo[t].frames,
+            puFxInfo[t].w,
+            puFxInfo[t].h,
+            puFxInfo[t].frameTime,
+            1
+        );
+
+        Anim_SetDrawSize(
+            &puFx[t],
+            PU_FX_SIZE * gameScale * (puFxInfo[t].w / puFxInfo[t].h),
+            PU_FX_SIZE * gameScale
+        );
+    }
+
+    /* Mystery box shown in the lane before the power-up is picked up. */
+    Anim_Init(
+        &boxAnim,
+        "../Assets/mystery_box.png",
+        BOX_FRAMES,
+        BOX_W,
+        BOX_H,
+        BOX_TIME,
+        1
+    );
+
+    Anim_SetDrawSize(
+        &boxAnim,
+        PU_SIZE * gameScale * (BOX_W / BOX_H),
+        PU_SIZE * gameScale
+    );
+
     /* Scale initial spacing along with the obstacle sizes. */
     for (int i = 0; i < MAX_OBS; i++)
     {
@@ -764,6 +1342,8 @@ static void Draw_World(void)
         );
     }
 
+    Draw_Pickups();
+
     if (state == STATE_GRAB)
     {
         Anim_Draw(
@@ -776,6 +1356,23 @@ static void Draw_World(void)
     else
     {
         float pinFeetY = PinFeetY(lane);
+        float auraY = pinFeetY - runAnim.drawH / 2.0f;
+
+        /* Power-up effects behind the pin. */
+        if (invincibleTimer > 0.0f)
+        {
+            Draw_PowerFx(PU_INVINCIBLE, player_x, auraY);
+        }
+
+        if (shieldTimer > 0.0f)
+        {
+            Draw_PowerFx(PU_SHIELD, player_x, auraY);
+        }
+
+        if (magnetTimer > 0.0f)
+        {
+            Draw_PowerFx(PU_MAGNET, player_x, auraY);
+        }
 
         Anim_Draw(
             &runAnim,
@@ -783,7 +1380,7 @@ static void Draw_World(void)
             pinFeetY - runAnim.drawH / 2.0f
         );
 
-		// keep the ball anchored at its existing position.
+        // keep the ball anchored at its existing position.
         Anim_Draw(
             &chaseAnim,
             enemyX,
@@ -842,6 +1439,9 @@ static void Draw_World(void)
         (float)width - 20.0f,
         50.0f
     );
+
+    Draw_HUD();
+    Draw_Roulette();
 }
 
 /* ============================================================
@@ -1074,10 +1674,10 @@ void Game_Update(void)
             float obsW = obsAnim[obs_type[i]].drawW;
 
             //obs_x[i] -= speed * dt;
-			// convert base gameplay speed to screen pixels per second. (to have consistent gameplay speed across different window sizes)
+            // convert base gameplay speed to screen pixels per second. (to have consistent gameplay speed across different window sizes)
             obs_x[i] -= speed * gameScale * dt;
 
-            /* swept collision check */ 
+            /* swept collision check */
             float playerHalfWidth = runAnim.drawW * 0.30f;
             float playerLeft = player_x - playerHalfWidth;
             float playerRight = player_x + playerHalfWidth;
@@ -1088,28 +1688,153 @@ void Game_Update(void)
 
             if (obs_lane[i] == lane && crossedPlayer)
             {
-                KillPlayer();
-                break;
+                HandleHit(i);
+
+                if (state != STATE_PLAYING)
+                {
+                    break;
+                }
             }
 
             /* Respawn behind the furthest obstacle. */
             if (obs_x[i] + obsW < 0.0f)
             {
-                float furthest = (float)width;
+                RespawnObstacle(i);
 
-                for (int j = 0; j < MAX_OBS; j++)
+            }
+        }
+        /* Power-ups and coins. */
+        if (state == STATE_PLAYING)
+        {
+            invincibleTimer = fmaxf(0.0f, invincibleTimer - dt);
+            shieldTimer = fmaxf(0.0f, shieldTimer - dt);
+            magnetTimer = fmaxf(0.0f, magnetTimer - dt);
+
+            Anim_Update(&coinAnim);
+            Anim_Update(&boxAnim);
+
+            /* Item roulette: icons spin, slow down, then land on the real power-up. */
+            if (rouletteTimer > 0.0f)
+            {
+                rouletteTimer -= dt;
+                rouletteSwitch -= dt;
+
+                if (rouletteTimer <= 0.0f)
                 {
-                    if (obs_x[j] > furthest)
-                    {
-                        furthest = obs_x[j];
-                    }
+                    /* the spin is over: show the real power-up and give it */
+                    rouletteShown = rouletteType;
+                    ApplyPowerUp(rouletteType);
+                    revealTimer = REVEAL_TIME;
+                }
+                else if (rouletteSwitch <= 0.0f)
+                {
+                    /* change the icon; changes get slower towards the end */
+                    float progress = 1.0f - rouletteTimer / ROULETTE_TIME;
+
+                    rouletteShown = (rouletteShown + 1) % NUM_POWERUPS;
+                    rouletteSwitch = 0.06f + 0.14f * progress;
+                }
+            }
+            else if (revealTimer > 0.0f)
+            {
+                revealTimer -= dt;
+            }
+
+            for (int t = 0; t < NUM_POWERUPS; t++)
+            {
+                Anim_Update(&puIconAnim[t]);
+            }
+
+            if (invincibleTimer > 0.0f)
+            {
+                Anim_Update(&puFx[PU_INVINCIBLE]);
+            }
+
+            if (shieldTimer > 0.0f)
+            {
+                Anim_Update(&puFx[PU_SHIELD]);
+            }
+
+            if (magnetTimer > 0.0f)
+            {
+                Anim_Update(&puFx[PU_MAGNET]);
+            }
+
+            float worldMove = speed * gameScale * dt;
+
+            /* Power-up pickup scrolls with the world. */
+            if (pu_active)
+            {
+                pu_x -= worldMove;
+
+                if (pu_lane == lane &&
+                    fabsf(pu_x - player_x) < PU_PICKUP_DIST * gameScale &&
+                    rouletteTimer <= 0.0f)
+                {
+                    StartRoulette(pu_type);
+                    pu_active = false;
+                }
+                else if (pu_x < -100.0f * gameScale)
+                {
+                    pu_active = false;
+                }
+            }
+            else
+            {
+                puSpawnTimer -= dt;
+
+                if (puSpawnTimer <= 0.0f)
+                {
+                    TrySpawnPickup();
+                }
+            }
+
+            /* Coins. */
+            coinSpawnTimer -= dt;
+
+            if (coinSpawnTimer <= 0.0f)
+            {
+                TrySpawnCoins();
+            }
+
+            float playerCentreY = PlayerCenterY(lane);
+
+            for (int c = 0; c < MAX_COINS; c++)
+            {
+                if (!coin_active[c])
+                {
+                    continue;
                 }
 
-                obs_x[i] =
-                    furthest +
-                    OBS_SPACING * gameScale * (speed / START_SPEED);
+                coin_x[c] -= worldMove;
 
-                RandomiseObstacle(i);
+                float cdx = player_x - coin_x[c];
+                float cdy = playerCentreY - coin_y[c];
+                float cdist = sqrtf(cdx * cdx + cdy * cdy);
+
+                /* Magnet pulls nearby coins towards the pin. */
+                if (magnetTimer > 0.0f &&
+                    cdist < MAGNET_RANGE * gameScale &&
+                    cdist > 1.0f)
+                {
+                    float pull = MAGNET_PULL_SPEED * gameScale * dt;
+
+                    coin_x[c] += cdx / cdist * pull;
+                    coin_y[c] += cdy / cdist * pull;
+                }
+
+                if (cdist < COIN_COLLECT_DIST * gameScale)
+                {
+                    CP_Sound_PlayAdvanced(sndCoin,COIN_VOL,1.0f,false,CP_SOUND_GROUP_SFX);
+                    coin_active[c] = false;
+                    
+                    coinCount++;
+                    score += (float)COIN_SCORE;
+                }
+                else if (coin_x[c] < -50.0f * gameScale)
+                {
+                    coin_active[c] = false;
+                }
             }
         }
 
@@ -1230,6 +1955,33 @@ void Game_Exit(void)
         {
             CP_Image_Free(obsAnim[t].sheet);
             obsAnim[t].sheet = NULL;
+        }
+    }
+
+    if (coinAnim.sheet != NULL)
+    {
+        CP_Image_Free(coinAnim.sheet);
+        coinAnim.sheet = NULL;
+    }
+
+    if (boxAnim.sheet != NULL)
+    {
+        CP_Image_Free(boxAnim.sheet);
+        boxAnim.sheet = NULL;
+    }
+
+    for (int t = 0; t < NUM_POWERUPS; t++)
+    {
+        if (puIconAnim[t].sheet != NULL)
+        {
+            CP_Image_Free(puIconAnim[t].sheet);
+            puIconAnim[t].sheet = NULL;
+        }
+
+        if (puFx[t].sheet != NULL)
+        {
+            CP_Image_Free(puFx[t].sheet);
+            puFx[t].sheet = NULL;
         }
     }
 

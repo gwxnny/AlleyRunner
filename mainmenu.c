@@ -118,14 +118,14 @@ static bool IsMouseOverButton(
     float mouseX,
     float mouseY)
 {
-    return IsAreaClicked(
-        btn.x,
-        btn.y,
-        btn.width,
-        btn.height,
-        mouseX,
-        mouseY
-    ) != 0;
+    float halfWidth = btn.width / 2.0f;
+    float halfHeight = btn.height / 2.0f;
+
+    return
+        mouseX >= btn.x - halfWidth &&
+        mouseX <= btn.x + halfWidth &&
+        mouseY >= btn.y - halfHeight &&
+        mouseY <= btn.y + halfHeight;
 }
 
 static void PlayMenuClick(void)
