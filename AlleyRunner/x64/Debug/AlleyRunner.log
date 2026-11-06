@@ -1,2 +1,22 @@
-﻿  mainmenu.c
-  AlleyRunner.vcxproj -> C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\x64\Debug\AlleyRunner.exe
+﻿  game.c
+C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(125,9): warning C4005: 'BTN_W': macro redefinition
+      C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(108,9):
+      see previous definition of 'BTN_W'
+  
+C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(126,9): warning C4005: 'BTN_H': macro redefinition
+      C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(109,9):
+      see previous definition of 'BTN_H'
+  
+C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(127,9): warning C4005: 'BTN_Y': macro redefinition
+      C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(112,9):
+      see previous definition of 'BTN_Y'
+  
+C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(128,9): warning C4005: 'RESTART_X': macro redefinition
+      C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(110,9):
+      see previous definition of 'RESTART_X'
+  
+C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(129,9): warning C4005: 'EXIT_X': macro redefinition
+      C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(111,9):
+      see previous definition of 'EXIT_X'
+  
+  AlleyRunner.vcxproj -> C:\Users\isaac\Documents\GitHub\AlleyRunner\x64\Debug\AlleyRunner.exe
