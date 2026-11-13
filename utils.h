@@ -30,3 +30,5 @@ float ClampFloat(
     float min_value,
     float max_value
 );
+
+int IsMouseInButton(float btn_x, float btn_y, float w, float h);

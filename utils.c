@@ -7,6 +7,7 @@
 @brief      : This file contains utility functions for the Alley Runner game.
 *//*________________________________________________________________________________*/
 #include "utils.h"
+#include "cprocessing.h"
 
 int IsAreaClicked(
     float area_center_x,
@@ -66,4 +67,12 @@ float ClampFloat(
     }
 
     return value;
+}
+
+int IsMouseInButton(float btn_x, float btn_y, float w, float h)
+{
+    float mx = CP_Input_GetMouseX();
+    float my = CP_Input_GetMouseY();
+    return (mx >= btn_x - w / 2.0f && mx <= btn_x + w / 2.0f &&
+        my >= btn_y - h / 2.0f && my <= btn_y + h / 2.0f);
 }

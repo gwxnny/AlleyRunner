@@ -6,6 +6,16 @@
 @project    : Team Project 1 - Alley Runner
 @brief      : This file contains the implementation of the main menu state for the Alley Runner.
 *//*________________________________________________________________________________*/
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <Windows.h>
+
 #include "mainmenu.h"
 #include "game.h"
 #include "utils.h"
@@ -108,14 +118,14 @@ static bool IsMouseOverButton(
     float mouseX,
     float mouseY)
 {
-    return IsAreaClicked(
-        btn.x,
-        btn.y,
-        btn.width,
-        btn.height,
-        mouseX,
-        mouseY
-    ) != 0;
+    float halfWidth = btn.width / 2.0f;
+    float halfHeight = btn.height / 2.0f;
+
+    return
+        mouseX >= btn.x - halfWidth &&
+        mouseX <= btn.x + halfWidth &&
+        mouseY >= btn.y - halfHeight &&
+        mouseY <= btn.y + halfHeight;
 }
 
 static void PlayMenuClick(void)
@@ -357,6 +367,188 @@ static void DrawVolumeSlider(
     );
 }
 
+/* Display settings persist between menu visits in the same run. */
+typedef enum
+{
+    DISPLAY_WINDOWED,
+    DISPLAY_BORDERLESS,
+    DISPLAY_FULLSCREEN
+} DisplayMode;
+
+static DisplayMode displayMode = DISPLAY_WINDOWED;
+
+/* Size used when returning to bordered windowed mode. */
+static int windowedWidth = 1280;
+static int windowedHeight = 720;
+
+static bool displaySettingsInitialized = false;
+
+static const char* GetDisplayModeLabel(void)
+{
+    switch (displayMode)
+    {
+    case DISPLAY_BORDERLESS:
+        return "BORDERLESS WINDOWED";
+
+    case DISPLAY_FULLSCREEN:
+        return "FULLSCREEN";
+
+    default:
+        return "WINDOWED";
+    }
+}
+
+static void ApplyDisplayMode(DisplayMode nextMode)
+{
+    HWND window = CP_System_GetWindowHandle();
+
+    if (window == NULL || nextMode == displayMode)
+    {
+        return;
+    }
+
+    /* Remember the current windowed canvas size. */
+    if (displayMode == DISPLAY_WINDOWED)
+    {
+        windowedWidth = CP_System_GetWindowWidth();
+        windowedHeight = CP_System_GetWindowHeight();
+    }
+
+    if (nextMode == DISPLAY_FULLSCREEN)
+    {
+        CP_System_Fullscreen();
+
+        displayMode = nextMode;
+        return;
+    }
+
+	// request windowed mode to ensure the window is not in fullscreen before changing the native frame.
+    CP_System_SetWindowSize(windowedWidth, windowedHeight);
+
+	// retrieve the native window handle and monitor information to adjust the window style and position for borderless or windowed mode.
+    window = CP_System_GetWindowHandle();
+
+    if (window == NULL)
+    {
+        return;
+    }
+
+    MONITORINFO monitorInfo = { 0 };
+    monitorInfo.cbSize = sizeof(monitorInfo);
+
+    HMONITOR monitor = MonitorFromWindow(
+        window,
+        MONITOR_DEFAULTTONEAREST
+    );
+
+    if (!GetMonitorInfo(monitor, &monitorInfo))
+    {
+        return;
+    }
+
+    LONG_PTR style = GetWindowLongPtr(window, GWL_STYLE);
+
+    if (nextMode == DISPLAY_BORDERLESS)
+    {
+        int monitorW =
+            monitorInfo.rcMonitor.right -
+            monitorInfo.rcMonitor.left;
+
+        int monitorH =
+            monitorInfo.rcMonitor.bottom -
+            monitorInfo.rcMonitor.top;
+
+        CP_System_SetWindowSize(monitorW, monitorH);
+
+        window = CP_System_GetWindowHandle();
+
+        if (window == NULL)
+        {
+            return;
+        }
+
+        style = GetWindowLongPtr(window, GWL_STYLE);
+
+        style &= ~((LONG_PTR)WS_OVERLAPPEDWINDOW);
+        style |= WS_POPUP;
+
+        SetWindowLongPtr(window, GWL_STYLE, style);
+
+        SetWindowPos(
+            window,
+            HWND_NOTOPMOST,
+            monitorInfo.rcMonitor.left,
+            monitorInfo.rcMonitor.top,
+            monitorW,
+            monitorH,
+            SWP_FRAMECHANGED | SWP_SHOWWINDOW
+        );
+    }
+    else
+    {
+        style &= ~((LONG_PTR)WS_POPUP);
+        style |= WS_OVERLAPPEDWINDOW;
+
+        SetWindowLongPtr(window, GWL_STYLE, style);
+
+		// calculate the outer window size needed for the requested client area.
+        RECT rect = {
+            0,
+            0,
+            windowedWidth,
+            windowedHeight
+        };
+
+        DWORD exStyle = (DWORD)GetWindowLongPtr(
+            window,
+            GWL_EXSTYLE
+        );
+
+        AdjustWindowRectEx(
+            &rect,
+            (DWORD)style,
+            GetMenu(window) != NULL,
+            exStyle
+        );
+
+        int outerW = rect.right - rect.left;
+        int outerH = rect.bottom - rect.top;
+
+        int workW =
+            monitorInfo.rcWork.right -
+            monitorInfo.rcWork.left;
+
+        int workH =
+            monitorInfo.rcWork.bottom -
+            monitorInfo.rcWork.top;
+
+        int x = monitorInfo.rcWork.left;
+        int y = monitorInfo.rcWork.top;
+
+        if (workW > outerW)
+        {
+            x += (workW - outerW) / 2;
+        }
+
+        if (workH > outerH)
+        {
+            y += (workH - outerH) / 2;
+        }
+
+        SetWindowPos(
+            window,
+            HWND_NOTOPMOST,
+            x,
+            y,
+            outerW,
+            outerH,
+            SWP_FRAMECHANGED | SWP_SHOWWINDOW
+        );
+    }
+
+    displayMode = nextMode;
+}
+
 static void DrawOptionsModal(
     float centerX,
     float centerY,
@@ -369,12 +561,12 @@ static void DrawOptionsModal(
     float sliderWidth = 400.0f;
     float sliderLeft = centerX - sliderWidth / 2.0f;
 
-    float musicY = centerY - 35.0f;
-    float sfxY = centerY + 60.0f;
+    float musicY = centerY - 10.0f;
+    float sfxY = centerY + 85.0f;
 
     Button backButton = {
         centerX,
-        centerY + 155.0f,
+        centerY + 190.0f,
         230.0f,
         52.0f,
         "BACK",
@@ -450,7 +642,7 @@ static void DrawOptionsModal(
         centerX,
         centerY,
         580.0f,
-        420.0f,
+        520.0f,
         0.0f,
         15.0f
     );
@@ -472,8 +664,57 @@ static void DrawOptionsModal(
     CP_Font_DrawText(
         "OPTIONS",
         centerX,
-        centerY - 155.0f
+        centerY - 210.0f
     );
+
+	// display mode button.
+    if (fontBody != NULL)
+    {
+        CP_Font_Set(fontBody);
+    }
+
+    CP_Settings_TextAlignment(
+        CP_TEXT_ALIGN_H_CENTER,
+        CP_TEXT_ALIGN_V_MIDDLE
+    );
+
+    CP_Settings_TextSize(26.0f);
+    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
+
+    CP_Font_DrawText(
+        "Display mode - click to change",
+        centerX,
+        centerY - 165.0f
+    );
+
+    Button displayButton = {
+        centerX,
+        centerY - 120.0f,
+        460.0f,
+        52.0f,
+        GetDisplayModeLabel(),
+        false
+    };
+
+    displayButton.isHovered =
+        IsMouseOverButton(displayButton, mouseX, mouseY);
+
+    DrawPillButton(displayButton);
+
+    if (CP_Input_MouseTriggered(MOUSE_BUTTON_LEFT) &&
+        displayButton.isHovered)
+    {
+        PlayMenuClick();
+
+        DisplayMode nextMode =
+            (DisplayMode)(((int)displayMode + 1) % 3);
+
+        activeVolumeSlider = 0;
+        ApplyDisplayMode(nextMode);
+
+		// stop drawing the options modal and return to the main menu.
+        return;
+    }
 
     // sliders.
     if (fontBody != NULL) {
@@ -626,61 +867,67 @@ static void DrawMenuChase(
     float windowW,
     float windowH)
 {
-	// pin animation.
+    float menuScale = windowH / 720.0f;
+
+    float pinSize = MENU_PIN_SIZE * menuScale;
+    float ballSize = MENU_BALL_SIZE * menuScale;
+    float chaseGap = MENU_CHASE_GAP * menuScale;
+
+    // pin animation.
     menuPinFrameTimer += dt;
 
-    while (menuPinFrameTimer >= MENU_PIN_FRAME_TIME) {
+    while (menuPinFrameTimer >= MENU_PIN_FRAME_TIME)
+    {
         menuPinFrameTimer -= MENU_PIN_FRAME_TIME;
 
         menuPinFrame =
             (menuPinFrame + 1) % MENU_PIN_FRAME_COUNT;
     }
 
-    // ball animation.
+	// ball animation.
     menuBallFrameTimer += dt;
 
-    while (menuBallFrameTimer >= MENU_BALL_FRAME_TIME) {
+    while (menuBallFrameTimer >= MENU_BALL_FRAME_TIME)
+    {
         menuBallFrameTimer -= MENU_BALL_FRAME_TIME;
 
         menuBallFrame =
             (menuBallFrame + 1) % MENU_BALL_FRAME_COUNT;
     }
 
-	// make the chase move across the screen.
     menuChaseTimer += dt;
-    menuChaseX += MENU_CHASE_SPEED * dt;
+
+    menuChaseX += MENU_CHASE_SPEED * menuScale * dt;
 
     float pinX = menuChaseX;
-    float ballX = menuChaseX - MENU_CHASE_GAP;
+    float ballX = menuChaseX - chaseGap;
 
-    // loop characters so that they keep running across the screen.
-    if (ballX - MENU_BALL_SIZE / 2.0f > windowW) {
-        menuChaseX = -MENU_PIN_SIZE / 2.0f;
+	// restart the chase when both characters haveleft the screen.
+    if (ballX - ballSize / 2.0f > windowW)
+    {
+        menuChaseX = -pinSize / 2.0f;
 
         pinX = menuChaseX;
-        ballX = menuChaseX - MENU_CHASE_GAP;
+        ballX = menuChaseX - chaseGap;
     }
 
-    // ground line
     float groundY = windowH * 0.90f;
-
-    // characters vertical levels
-    float ballYOffset = 190.0f; // higher number = downwards, lower number = upwards.
+    float ballYOffset = 190.0f * menuScale;
     float pinYOffset = 0.0f;
 
     CP_Settings_ImageMode(CP_POSITION_CENTER);
 
-    // draw only the ball's current frame.
-    if (menuBall != NULL) {
+    if (menuBall != NULL)
+    {
         float sourceLeft =
             (float)menuBallFrame * MENU_BALL_FRAME_W;
 
         CP_Image_DrawSubImage(
             menuBall,
             ballX,
-            groundY - MENU_BALL_SIZE / 2.0f + ballYOffset,
-            MENU_BALL_SIZE,
-            MENU_BALL_SIZE,
+            groundY - ballSize / 2.0f + ballYOffset,
+            ballSize,
+            ballSize,
             sourceLeft,
             0.0f,
             sourceLeft + MENU_BALL_FRAME_W,
@@ -689,17 +936,17 @@ static void DrawMenuChase(
         );
     }
 
-    // draw only the pin's current frame.
-    if (menuPin != NULL) {
+    if (menuPin != NULL)
+    {
         float sourceLeft =
             (float)menuPinFrame * MENU_PIN_FRAME_W;
 
         CP_Image_DrawSubImage(
             menuPin,
             pinX,
-            groundY - MENU_PIN_SIZE / 2.0f + pinYOffset,
-            MENU_PIN_SIZE,
-            MENU_PIN_SIZE,
+            groundY - pinSize / 2.0f + pinYOffset,
+            pinSize,
+            pinSize,
             sourceLeft,
             0.0f,
             sourceLeft + MENU_PIN_FRAME_W,
@@ -727,6 +974,16 @@ void Main_Menu_Init(void)
     activeVolumeSlider = 0;
 
     floatTimer = 0.0f;
+
+    // apply the last display mode used when returning to the menu.
+    if (!displaySettingsInitialized)
+    {
+        windowedWidth = CP_System_GetWindowWidth();
+        windowedHeight = CP_System_GetWindowHeight();
+
+        displayMode = DISPLAY_WINDOWED;
+        displaySettingsInitialized = true;
+    }
 
 	// initialize audio settings only once when the main menu is first loaded.
     if (!audioSettingsInitialized) {
@@ -817,7 +1074,11 @@ void Main_Menu_Init(void)
     );
 
     // restart movement.
-    menuChaseX = -MENU_PIN_SIZE / 2.0f;
+    float menuScale =
+    (float)CP_System_GetWindowHeight() / 720.0f;
+
+menuChaseX =
+    -(MENU_PIN_SIZE * menuScale) / 2.0f;
     menuChaseTimer = 0.0f;
 
     // restart both animations.
@@ -1034,14 +1295,40 @@ void Main_Menu_Update(void)
     }
 
     // footer.
-    if (fontBody != NULL) {
+    if (fontBody != NULL)
+    {
         CP_Font_Set(fontBody);
     }
 
-    CP_Settings_NoStroke();
-    CP_Settings_TextSize(24.0f);
+	// scale the footer text and spacing based on the window size.
+    float footerScale = fminf(
+        windowW / 1280.0f,
+        windowH / 720.0f
+    );
 
-    // high score.
+    float footerSize = 36.0f * footerScale;
+    float footerMargin = 25.0f * footerScale;
+    float footerBottom = 20.0f * footerScale;
+
+    float footerY = windowH - footerBottom;
+
+    float shadowOffset = 2.0f * footerScale;
+    float outlineWidth = 1.0f * footerScale;
+
+    CP_Settings_NoStroke();
+    CP_Settings_TextSize(footerSize);
+
+	// high score text.
+    char highScoreText[64];
+
+    snprintf(
+        highScoreText,
+        sizeof(highScoreText),
+        "HIGH SCORE: %d",
+        Game_GetHighScore()
+    );
+
+    // high score: bottom left.
     CP_Settings_TextAlignment(
         CP_TEXT_ALIGN_H_LEFT,
         CP_TEXT_ALIGN_V_BOTTOM
@@ -1050,22 +1337,22 @@ void Main_Menu_Update(void)
     CP_Settings_Fill(CP_Color_Create(0, 0, 0, 230));
 
     CP_Font_DrawText(
-        "HIGH SCORE: 00000",
-        27.0f,
-        windowH - 17.0f
+        highScoreText,
+        footerMargin + shadowOffset,
+        footerY + shadowOffset
     );
 
     DrawTextWithOutline(
-        "HIGH SCORE: 00000",
-        25.0f,
-        windowH - 20.0f,
-        24.0f,
+        highScoreText,
+        footerMargin,
+        footerY,
+        footerSize,
         whiteFill,
         blackStroke,
-        1.0f
+        outlineWidth
     );
 
-    // team name.
+	// team name: bottom right.
     CP_Settings_TextAlignment(
         CP_TEXT_ALIGN_H_RIGHT,
         CP_TEXT_ALIGN_V_BOTTOM
@@ -1075,18 +1362,18 @@ void Main_Menu_Update(void)
 
     CP_Font_DrawText(
         "Team IsaacACat - CSD1401",
-        windowW - 23.0f,
-        windowH - 17.0f
+        windowW - footerMargin + shadowOffset,
+        footerY + shadowOffset
     );
 
     DrawTextWithOutline(
         "Team IsaacACat - CSD1401",
-        windowW - 25.0f,
-        windowH - 20.0f,
-        24.0f,
+        windowW - footerMargin,
+        footerY,
+        footerSize,
         whiteFill,
         blackStroke,
-        1.0f
+        outlineWidth
     );
 }
 
@@ -1102,12 +1389,12 @@ void Main_Menu_Exit(void)
     CP_Sound_StopGroup(CP_SOUND_GROUP_MUSIC);
 
     if (buttonSound != NULL) {
-        CP_Sound_Free(&buttonSound);
+        CP_Sound_Free(buttonSound);
         buttonSound = NULL;
     }
 
     if (menuMusic != NULL) {
-        CP_Sound_Free(&menuMusic);
+        CP_Sound_Free(menuMusic);
         menuMusic = NULL;
     }
 
@@ -1149,4 +1436,11 @@ GameState Main_Menu_GetNextState(void)
 void Main_Menu_SetState(GameState state)
 {
     currentRequestedState = state;
+}
+
+// returns true if the current display mode is fullscreen or borderless windowed.
+int Main_Menu_IsFullscreenMode(void)
+{
+    return displayMode == DISPLAY_FULLSCREEN ||
+        displayMode == DISPLAY_BORDERLESS;
 }

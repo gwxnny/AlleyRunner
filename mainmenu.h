@@ -28,5 +28,6 @@ void Main_Menu_Exit(void);
 // get and change the current state of the game.
 GameState Main_Menu_GetNextState(void);
 void Main_Menu_SetState(GameState state);
+int Main_Menu_IsFullscreenMode(void);
 
 #endif // MAINMENU_H
