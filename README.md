@@ -1,10 +1,8 @@
 # Alley Runner [By IsaacACat]
 
-<img src="../AlleyRunner/Assets/Reference_Images/gameplay_ref.png" width="500" alt="gameplay_img">
+<img src="./Assets/Reference_Images/gameplay_ref.png" width="500" alt="gameplay_img">
 
 A three-lane endless runner where a bowling pin flees a giant bowling ball. Dodge obstacles, collect coins, and take risks to build your score multiplier while protecting your lead.
-
-> STILL IN PROGRESS
 
 ## Concept & Problem Space
 
@@ -41,27 +39,27 @@ A three-lane endless runner where a bowling pin flees a giant bowling ball. Dodg
 ### Gwen
 
 - [x] **UI / Menus — Main Menu:** Implement and test Play, How to Play, Options, and Exit, including menu music, click sounds, and Music/SFX sliders.
-- [ ] **Collision + Health — Barrier Collision:** Apply 1-heart damage on an ordinary barrier hit; respect active Shield and Unkillable effects.
-- [ ] **Obstacles — Barrier:** Add the barrier obstacle asset, spawning, rendering, and a hitbox aligned with its visible shape.
-- [ ] **Obstacles — Oil Spill:** Add the oil-spill obstacle, visual feedback, and contact detection; integrate with Isaac's random-lane behavior.
-- [ ] **Obstacles — Hole in Ground:** Add the hole obstacle asset, spawning, rendering, and detection hook for Isaac's death behavior.
+- [x] **Collision + Health — Barrier Collision:** Apply 1-heart damage on an ordinary barrier hit; respect active Shield and Unkillable effects.
+- [x ] **Obstacles — Barrier:** Add the barrier obstacle asset, spawning, rendering, and a hitbox aligned with its visible shape.
+- [x] **Obstacles — Oil Spill:** Add the oil-spill obstacle, visual feedback, and contact detection; integrate with Isaac's random-lane behavior.
+- [x] **Obstacles — Hole in Ground:** Add the hole obstacle asset, spawning, rendering, and detection hook for Isaac's death behavior.
 - [x] **Distractions — Ragebait Words:** Show large moving text in unpredictable, brief bursts with quiet periods; keep it independent of physical obstacles and hide it during death/menu screens.
 
 ### Isaac
 
-- [ ] **Player Movement — Lane Switching:** Switch the player between 3 lanes using W/S without leaving the lane bounds.
-- [ ] **Player Movement — Oil Spill → Random Lane:** Force a random lane change when an oil spill is triggered; coordinate with Gwen's hazard implementation.
-- [ ] **Difficulty — Increasing Obstacle Speed:** Increase obstacle speed over time up to a maximum; keep spacing playable at higher speeds.
-- [ ] **Death System — Hole Collision:** Trigger immediate death on falling into a hole, including while Unkillable is active.
-- [ ] **Death System — Falling Into Hole Animation:** Trigger and complete the falling animation before the death screen.
-- [ ] **Collectibles — Coins:** Spawn coins, detect collection, remove collected coins, and update the run's coin count.
-- [ ] **Scoring — Score Multiplier:** Update the multiplier when stars are collected and apply it to score calculation.
-- [ ] **Scoring — Run Score:** Increase score while running using elapsed time; stop score accumulation on death.
+- [x] **Player Movement — Lane Switching:** Switch the player between 3 lanes using W/S without leaving the lane bounds.
+- [x] **Player Movement — Oil Spill → Random Lane:** Force a random lane change when an oil spill is triggered; coordinate with Gwen's hazard implementation.
+- [x] **Difficulty — Increasing Obstacle Speed:** Increase obstacle speed over time up to a maximum; keep spacing playable at higher speeds.
+- [x] **Death System — Hole Collision:** Trigger immediate death on falling into a hole, including while Unkillable is active.
+- [x] **Death System — Falling Into Hole Animation:** Trigger and complete the falling animation before the death screen.
+- [x] **Collectibles — Coins:** Spawn coins, detect collection, remove collected coins, and update the run's coin count.
+- [x] **Scoring — Score Multiplier:** Update the multiplier when stars are collected and apply it to score calculation.
+- [x] **Scoring — Run Score:** Increase score while running using elapsed time; stop score accumulation on death.
 
 ### Xiao Hui
 
-- [ ] **Animation — Bowling Ball Running/Rolling:** Create and integrate the pursuing ball's movement animation.
-- [ ] **Animation — Pin Running:** Create and integrate the player pin's running animation.
+- [x] **Animation — Bowling Ball Running/Rolling:** Create and integrate the pursuing ball's movement animation.
+- [x] **Animation — Pin Running:** Create and integrate the player pin's running animation.
 - [ ] **Collectibles / Animation — Floating Coin:** Create the coin's floating or bobbing animation.
 - [ ] **Collectibles — Score Multiplier Star:** Create the star's visual/animation and collection hook; integrate with Isaac's multiplier logic.
 - [ ] **Power-Up Animation — Shield:** Show the shield effect while active; remove it on use or expiry.
@@ -69,23 +67,23 @@ A three-lane endless runner where a bowling pin flees a giant bowling ball. Dodg
 
 ### Lekkar
 
-- [ ] **Collision + Health — Heart System:** Start with 3 hearts, cap health at 3, and expose damage/healing updates.
-- [ ] **Death System — Death at 0 Hearts:** Trigger death exactly once when health reaches 0.
-- [ ] **UI / Menus — Death Screen:** Show final score and coins; support Restart and return to the main menu.
-- [ ] **UI / Menus — Pause Menu:** Pause gameplay updates and provide Continue and return-to-menu actions.
-- [ ] **UI / Menus — Health Display:** Render 3 heart indicators and update them when health changes.
+- [x] **Collision + Health — Heart System:** Start with 3 hearts, cap health at 3, and expose damage/healing updates.
+- [x] **Death System — Death at 0 Hearts:** Trigger death exactly once when health reaches 0.
+- [x] **UI / Menus — Death Screen:** Show final score and coins; support Restart and return to the main menu.
+- [x] **UI / Menus — Pause Menu:** Pause gameplay updates and provide Continue and return-to-menu actions.
+- [x] **UI / Menus — Health Display:** Render 3 heart indicators and update them when health changes.
 
 ### Shared Responsibilities — Xiao Hui & Isaac
 
-- [ ] **Animation / Death System — Pin Death:** Xiao Hui creates/prepares the pin death animation; Isaac integrates its trigger and playback into the death flow.
+- [x] **Animation / Death System — Pin Death:** Xiao Hui creates/prepares the pin death animation; Isaac integrates its trigger and playback into the death flow.
 
 ### Unassigned — Ownership Needed
 
-- [ ] **Power-Ups — Shield:** Implement the pickup and state; block 1 barrier hit, expire after 10 seconds, and synchronize the visual effect.
-- [ ] **Power-Ups — Unkillable:** Implement the pickup and 5-second effect; ignore barrier damage but not hole death; synchronize the visual effect.
-- [ ] **Power-Ups — Extra Life:** Restore 1 heart only when current health is below 3; connect to the health display.
-- [ ] **Power-Ups — Coin Magnet (Optional):** Attract nearby coins while active; duration and attraction range remain to be decided.
-- [ ] **Core Systems — Ball Chase / Proximity:** Assign ownership for the ball-to-pin distance, penalties, recovery rules, and catch-triggered game over.
+- [x] **Power-Ups — Shield:** Implement the pickup and state; block 1 barrier hit, expire after 10 seconds, and synchronize the visual effect.
+- [x] **Power-Ups — Unkillable:** Implement the pickup and 5-second effect; ignore barrier damage but not hole death; synchronize the visual effect.
+- [x] **Power-Ups — Extra Life:** Restore 1 heart only when current health is below 3; connect to the health display.
+- [x] **Power-Ups — Coin Magnet (Optional):** Attract nearby coins while active; duration and attraction range remain to be decided.
+- [x] **Core Systems — Ball Chase / Proximity:** Assign ownership for the ball-to-pin distance, penalties, recovery rules, and catch-triggered game over.
 
 ## Technical Systems
 
