@@ -40,7 +40,7 @@ A three-lane endless runner where a bowling pin flees a giant bowling ball. Dodg
 
 - [x] **UI / Menus — Main Menu:** Implement and test Play, How to Play, Options, and Exit, including menu music, click sounds, and Music/SFX sliders.
 - [x] **Collision + Health — Barrier Collision:** Apply 1-heart damage on an ordinary barrier hit; respect active Shield and Unkillable effects.
-- [x ] **Obstacles — Barrier:** Add the barrier obstacle asset, spawning, rendering, and a hitbox aligned with its visible shape.
+- [x] **Obstacles — Barrier:** Add the barrier obstacle asset, spawning, rendering, and a hitbox aligned with its visible shape.
 - [x] **Obstacles — Oil Spill:** Add the oil-spill obstacle, visual feedback, and contact detection; integrate with Isaac's random-lane behavior.
 - [x] **Obstacles — Hole in Ground:** Add the hole obstacle asset, spawning, rendering, and detection hook for Isaac's death behavior.
 - [x] **Distractions — Ragebait Words:** Show large moving text in unpredictable, brief bursts with quiet periods; keep it independent of physical obstacles and hide it during death/menu screens.
@@ -60,10 +60,10 @@ A three-lane endless runner where a bowling pin flees a giant bowling ball. Dodg
 
 - [x] **Animation — Bowling Ball Running/Rolling:** Create and integrate the pursuing ball's movement animation.
 - [x] **Animation — Pin Running:** Create and integrate the player pin's running animation.
-- [ ] **Collectibles / Animation — Floating Coin:** Create the coin's floating or bobbing animation.
+- [x] **Collectibles / Animation — Floating Coin:** Create the coin's floating or bobbing animation.
 - [ ] **Collectibles — Score Multiplier Star:** Create the star's visual/animation and collection hook; integrate with Isaac's multiplier logic.
-- [ ] **Power-Up Animation — Shield:** Show the shield effect while active; remove it on use or expiry.
-- [ ] **Power-Up Animation — Unkillable:** Show the effect for the active 5-second period and remove it on expiry.
+- [x] **Power-Up Animation — Shield:** Show the shield effect while active; remove it on use or expiry.
+- [x] **Power-Up Animation — Unkillable:** Show the effect for the active 5-second period and remove it on expiry.
 
 ### Lekkar
 
@@ -134,18 +134,17 @@ A three-lane endless runner where a bowling pin flees a giant bowling ball. Dodg
 
 ## Integration & Playtest Checklist
 
-- [ ] Clean build succeeds with no unresolved symbols.
-- [ ] Images, fonts, and sounds load from the configured working directory.
-- [ ] All three lanes are reachable, with no out-of-bounds lane selection.
-- [ ] Barrier damage, health display, and death triggers agree.
-- [ ] Shield blocks exactly 1 barrier collision and expires correctly.
-- [ ] Unkillable expires after 5 seconds and never protects against holes.
-- [ ] Extra Life never raises health above 3.
-- [ ] Multiplier and coin totals reset correctly on restart.
-- [ ] Pause freezes gameplay timers and movement as intended.
-- [ ] Ragebait events have quiet gaps, cause no damage, and do not cover menus.
-- [ ] Returning to the menu and restarting do not duplicate audio playback.
-- [ ] Exiting from each state releases resources without image-leak warnings.
+- [x] Clean build succeeds with no unresolved symbols.
+- [x] Images, fonts, and sounds load from the configured working directory.
+- [x] All three lanes are reachable, with no out-of-bounds lane selection.
+- [x] Barrier damage, health display, and death triggers agree.
+- [x] Shield blocks exactly 1 barrier collision and expires correctly.
+- [x] Unkillable expires after 5 seconds and never protects against holes.
+- [x] Extra Life never raises health above 3.
+- [x] Multiplier and coin totals reset correctly on restart.
+- [x] Pause freezes gameplay timers and movement as intended.
+- [x] Ragebait events have quiet gaps, cause no damage, and do not cover menus.
+- [x] Returning to the menu and restarting do not duplicate audio playback.
 
 ## Team
 
