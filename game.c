@@ -68,6 +68,8 @@ static float gameScale = 1.0f;
    Power-ups
    ============================================================ */
 #define INVINCIBLE_TIME 5.0f
+#define INVINCIBLE_ANIM_SCALE 1.35f
+#define INVINCIBLE_FEET_FRAC  0.88f
 #define SHIELD_TIME     10.0f
 #define MAGNET_TIME     8.0f
 
@@ -77,7 +79,7 @@ static float gameScale = 1.0f;
 #define PU_PICKUP_DIST  60.0f
 #define PU_FX_SIZE      190.0f  /* height of the effect drawn on the pin */
 
-   /* Mystery box (what the pickup looks like in the lane) and the item roulette. */
+      /* Mystery box (what the pickup looks like in the lane) and the item roulette. */
 #define BOX_FRAMES      4
 #define BOX_W           64.0f
 #define BOX_H           64.0f
@@ -100,16 +102,25 @@ static float gameScale = 1.0f;
 #define COIN_COLLECT_DIST 60.0f
 #define COIN_SCORE        25
 
+
+/* Multiplier: each one picked up raises the score multiplier. */
+#define MULT_SIZE         90.0f   /* drawn size */
+#define MULT_SPAWN_MIN    8.0f    /* seconds between stars */
+#define MULT_SPAWN_MAX    12.0f
+#define MULT_COLLECT_DIST 60.0f
+#define MAX_MULT     5
+
+
 #define MAGNET_RANGE      450.0f
 #define MAGNET_PULL_SPEED 1400.0f
 
 
-/* Death-screen layout. */
-#define BTN_W     300.0f
-#define BTN_H     200.0f
-#define RESTART_X 400.0f
-#define EXIT_X    1200.0f
-#define BTN_Y     400.0f
+///* Death-screen layout. */
+//#define BTN_W     300.0f
+//#define BTN_H     200.0f
+//#define RESTART_X 400.0f
+//#define EXIT_X    1200.0f
+//#define BTN_Y     400.0f
 
 
 /* Death animation*/
@@ -293,6 +304,7 @@ static GameplayPhase state;
 
 /* Background and scoreboard. */
 static CP_Image bgImage = NULL;
+static CP_Image borderImage = NULL;
 
 static CP_Font scoreFont = NULL;
 static CP_Font deathFont = NULL;
@@ -334,6 +346,17 @@ static Animation coinAnim;
 static Animation puIconAnim[NUM_POWERUPS];  /* pickup icon in the lane */
 static Animation puFx[NUM_POWERUPS];        /* effect drawn on the pin */
 static int coinCount = 0;
+
+/*Multiplier sprite sheets*/
+static Animation multiFx;
+
+/* Star pickup and the score multiplier it raises. */
+static bool  multiplier_active = false;
+static float multiplier_x = 0.0f;
+static float multiplier_y = 0.0f;
+static float multiplierSpawnTimer = 0.0f;
+static int   scoreMultiplier = 1;
+
 
 static const float pinYOffset[NUM_LANES] =
 {
@@ -409,6 +432,7 @@ static Animation barrierBreakAnim;
 static Animation holeDeathAnim;      /* pin falls into the hole */
 static Animation oilDeathAnim;       /* pin slips on the oil */
 static Animation* activeDeathAnim = NULL;
+static int deathObs = -1;
 
 static int   obs_phase[MAX_OBS];
 static int   obs_frame[MAX_OBS];
@@ -526,38 +550,9 @@ static void Anim_DrawFrame(const Animation* a, int frame, float x, float y, int 
         left, 0.0f, left + a->frameW, a->frameH, alpha);
 }
 
-//// x and y are the centre of the sprite.
-//void Anim_Draw(Animation* a, float x, float y)
-//{
-//    if (a->sheet == NULL)
-//    {
-//        return;
-//    }
-//
-//    float left = (float)a->currentFrame * a->frameW;
-//
-//    CP_Image_DrawSubImage(
-//        a->sheet,
-//        x,
-//        y,
-//        a->drawW,
-//        a->drawH,
-//        left,
-//        0.0f,
-//        left + a->frameW,
-//        a->frameH,
-//        255
-//    );
-//}
-
 /* ============================================================
    Game helpers
    ============================================================ */
-
-float LaneGround(int l)
-{
-    return top_lane_y + (float)l * lane_gap + FEET_OFFSET;
-}
 
 static float PinFeetY(int laneIndex)
 {
@@ -624,7 +619,7 @@ static void RandomiseObstacle(int i)
 
     if (obs_type[i] == OBS_OIL && oilSpawnAnim.sheet != NULL)
     {
-        obs_phase[i] = OBS_PH_WAITING;
+        obs_phase[i] = OBS_PH_SPAWN;
     }
 }
 
@@ -664,6 +659,10 @@ void StartRun(void)
 
     coinSpawnTimer = 2.0f;
 
+    multiplier_active = false;
+    multiplierSpawnTimer = CP_Random_RangeFloat(MULT_SPAWN_MIN, MULT_SPAWN_MAX);
+    scoreMultiplier = 1;
+
     enemyX = (float)width * 0.12f;
     enemyGround = PinFeetY(lane);
 
@@ -696,10 +695,11 @@ static void KillPlayer(void)
 }
 
 /* The pin dies in place and plays its own animation (hole / oil). */
-static void StartDying(Animation* a)
+static void StartDying(Animation* a, int obsIndex)
 {
     state = STATE_DYING;
     activeDeathAnim = a;
+    deathObs = obsIndex;
     Anim_Reset(a);
     PlayDeathAudio();
 }
@@ -720,16 +720,16 @@ typedef struct
 /* Pickup icons (the item sitting in the lane). Edit to match your art. */
 static const SheetInfo puIconInfo[NUM_POWERUPS] =
 {
-    { "../Assets/powerup_invincible.png", 4, 64.0f, 64.0f, 0.12f },
-    { "../Assets/powerup_shield.png",     4, 64.0f, 64.0f, 0.12f },
-    { "../Assets/powerup_magnet.png",     4, 64.0f, 64.0f, 0.12f }
+    { "../Assets/invincible.PNG",    1, 640.0f, 640.0f, 0.12f },
+    { "../Assets/pickup_shield.png", 1, 500.0f, 500.0f, 0.12f },
+    { "../Assets/magnet.PNG",        1, 640.0f, 640.0f, 0.12f }
 };
 
 /* Effects drawn on the pin (they all loop). */
 static const SheetInfo puFxInfo[NUM_POWERUPS] =
 {
-    { "../Assets/fx_invincible.png", 6, 128.0f, 128.0f, 0.10f },
-    { "../Assets/pixil-layer-Pin Shield (500).png",     6, 128.0f, 128.0f, 0.10f },
+    { "../Assets/invincible_anim.png", 4, 384.0f, 426.0f, 0.15f },
+    { "../Assets/pixil-layer-Pin Shield (500).png",     4, 500.0f, 500.0f, 0.10f },
     { "../Assets/fx_magnet.png",     6, 128.0f, 128.0f, 0.10f }
 };
 
@@ -872,6 +872,27 @@ static void TrySpawnCoins(void)
     }
 }
 
+static void SpawnMultiplier(void)
+{
+    for (int tries = 0; tries < 6; tries++)
+    {
+        int l = CP_Random_RangeInt(0, NUM_LANES - 1);
+        float x = (float)width + 100.0f * gameScale;
+
+        if (LaneClearAt(x, l, 400.0f * gameScale))
+        {
+            multiplier_active = true;
+            multiplier_x = x;
+            multiplier_y = PlayerCenterY(l);
+
+            multiplierSpawnTimer = CP_Random_RangeFloat(MULT_SPAWN_MIN, MULT_SPAWN_MAX);
+
+            return;
+        }
+    }
+
+    /* No clear lane right now: try again next frame. */
+}
 /* A barrier breaks: play the break animation and hold its last frame.
    It keeps scrolling with the world and respawns normally off screen. */
 static void BreakObstacle(int i)
@@ -891,7 +912,7 @@ static void BreakObstacle(int i)
 /* Advance the spawn / break animation of obstacle i. */
 static void ObsFx_Update(int i, float dt)
 {
-    if (obs_phase[i] == OBS_PH_WAITING) 
+    if (obs_phase[i] == OBS_PH_WAITING)
     {
         /* start the spawn animation once the whole spill is on screen */
         if (obs_x[i] + obsAnim[obs_type[i]].drawW < (float)width * OIL_SPAWN_AT)
@@ -975,6 +996,10 @@ static bool HandleHit(int i)
     }
 
     /* No power-up protects against this obstacle: lose a heart. */
+    if (type == OBS_BARRIER)
+    {
+        BreakObstacle(i);
+    }
     lives--;
 
     if (lives <= 0)
@@ -996,7 +1021,7 @@ static bool HandleHit(int i)
 
         if (dyingAnim != NULL && dyingAnim->sheet != NULL)
         {
-            StartDying(dyingAnim);
+            StartDying(dyingAnim, i);
         }
         else
         {
@@ -1178,6 +1203,21 @@ static void Draw_Roulette(void)
     }
 }
 
+/* Multiplier sprite sheet, or a plain circle if it's missing. */
+static void Draw_Multiplier(float x, float y)
+{
+    if (multiFx.sheet != NULL)
+    {
+        Anim_Draw(&multiFx, x, y);
+        return;
+    }
+
+    CP_Settings_NoStroke();
+    CP_Settings_Fill(CP_Color_Create(255, 0, 0, 90));
+    CP_Graphics_DrawCircle(x, y, MULT_SIZE * gameScale);
+
+}
+
 static void Draw_HUD(void)
 {
     char line[48];
@@ -1200,6 +1240,10 @@ static void Draw_HUD(void)
     snprintf(line, sizeof(line), "COINS %d", coinCount);
     CP_Font_DrawText(line, 220.0f, 50.0f);
     //y += 30.0f;
+
+    CP_Settings_Fill(CP_Color_Create(255, 255, 80, 255));
+    snprintf(line, sizeof(line), "x%d", scoreMultiplier);
+    CP_Font_DrawText(line, 1100.0f, 50.0f);
 
     if (invincibleTimer > 0.0f)
     {
@@ -1427,6 +1471,10 @@ void Game_Init(void)
     /* Background. */
     bgImage = CP_Image_Load("../Assets/background.png");
 
+    /*Score Borders*/
+    borderImage = CP_Image_Load("../Assets/background.png");
+
+
     /* Gameplay audio. */
     sndJump = CP_Sound_Load("../Assets/jump.mp3");
     sndCoin = CP_Sound_Load("../Assets/coin_pickup.mp3");
@@ -1462,46 +1510,6 @@ void Game_Init(void)
 
     Anim_Init(&grabAnim, "../Assets/pixil-layer-0 (3).png",
         8, 2000, 1000, DEATH_FRAME_TIME, 0);
-
-    //Anim_Init(
-    //    &grabAnim,
-    //    "../Assets/enemy_grab.png",
-    //    6,
-    //    GRAB_W,
-    //    GRAB_H,
-    //    0.20f,
-    //    0
-    //);
-
-    //Anim_Init(
-    //    &grabAnim,
-    //    "../Assets/enemy_grab.png",
-    //    6,
-    //    GRAB_W,
-    //    GRAB_H,
-    //    0.20f,
-    //    0
-    //);
-
-    //Anim_Init(
-    //    &grabAnim,
-    //    "../Assets/enemy_grab.png",
-    //    6,
-    //    GRAB_W,
-    //    GRAB_H,
-    //    0.20f,
-    //    0
-    //);
-
-    //Anim_Init(
-    //    &grabAnim,
-    //    "../Assets/enemy_grab.png",
-    //    6,
-    //    GRAB_W,
-    //    GRAB_H,
-    //    0.20f,
-    //    0
-    //);
 
     /* scale character display sizes with the window height. */
     Anim_SetDrawSize(
@@ -1558,16 +1566,16 @@ void Game_Init(void)
     Anim_SetDrawSize(&barrierBreakAnim,
         obsAnim[OBS_BARRIER].drawW, obsAnim[OBS_BARRIER].drawH);
 
-    /* Pin death animations (hole / oil), same scale as the running pin. */
+    /* Pin death animations (hole / oil), same scale as the obstacles. */
     Anim_Init(&holeDeathAnim, holeDeathInfo.path, holeDeathInfo.frames,
         holeDeathInfo.w, holeDeathInfo.h, holeDeathInfo.frameTime, 0);
     Anim_SetDrawSize(&holeDeathAnim,
-        holeDeathInfo.w * gameScale, holeDeathInfo.h * gameScale);
+        obsAnim[OBS_HOLE].drawW * 1.45f, obsAnim[OBS_HOLE].drawH * 1.45f );
 
     Anim_Init(&oilDeathAnim, oilDeathInfo.path, oilDeathInfo.frames,
         oilDeathInfo.w, oilDeathInfo.h, oilDeathInfo.frameTime, 0);
     Anim_SetDrawSize(&oilDeathAnim,
-        oilDeathInfo.w * gameScale, oilDeathInfo.h * gameScale);
+        obsAnim[OBS_OIL].drawW, obsAnim[OBS_OIL].drawH);
 
     activeDeathAnim = NULL;
 
@@ -1611,11 +1619,21 @@ void Game_Init(void)
             1
         );
 
-        Anim_SetDrawSize(
-            &puFx[t],
-            PU_FX_SIZE * gameScale * (puFxInfo[t].w / puFxInfo[t].h),
-            PU_FX_SIZE * gameScale
-        );
+        float fxH = PU_FX_SIZE * gameScale;
+        float fxW = fxH * (puFxInfo[t].w / puFxInfo[t].h);
+
+        if (t == PU_SHIELD)
+        {
+            fxW = runAnim.drawW;   /* same size as the pin */
+            fxH = runAnim.drawH;
+        }
+        else if (t == PU_INVINCIBLE)
+        {
+            fxH = runAnim.drawH * INVINCIBLE_ANIM_SCALE;
+            fxW = fxH * (puFxInfo[t].w / puFxInfo[t].h);
+        }
+
+        Anim_SetDrawSize(&puFx[t], fxW, fxH);
     }
 
     /* Mystery box shown in the lane before the power-up is picked up. */
@@ -1698,10 +1716,19 @@ static void Draw_World(void)
 
     for (int i = 0; i < MAX_OBS; i++)
     {
+        if (state == STATE_DYING && i == deathObs)
+        {
+            continue;     /* the death animation draws its own hole / oil */
+        }
+
         DrawObstacle(i);
     }
 
     Draw_Pickups();
+    if (multiplier_active)
+    {
+        Draw_Multiplier(multiplier_x, multiplier_y);
+    }
 
     if (state == STATE_GRAB)
     {
@@ -1717,14 +1744,23 @@ static void Draw_World(void)
     }
     else if (state == STATE_DYING && activeDeathAnim != NULL)
     {
-        /* hole / oil death: same spot and scale as the running pin */
-        float pinFeetY = PinFeetY(lane);
+        /* hole / oil death: drawn where the obstacle was, at the obstacle's scale */
+        if (deathObs >= 0)
+        {
+            float deathX = obs_x[deathObs] + obsAnim[obs_type[deathObs]].drawW / 2.0f;
+            float deathY = (float)height * obstacleLaneCenter[obs_lane[deathObs]];
+            
+            if (obs_type[deathObs] == OBS_HOLE)
+            {
+                deathY -= 35.0f * gameScale;
+            }
 
-        Anim_Draw(
-            activeDeathAnim,
-            player_x,
-            pinFeetY - activeDeathAnim->drawH / 2.0f
-        );
+            if (obs_type[deathObs] == OBS_OIL)
+            {
+                deathY -= 35.0f * gameScale;
+            }
+            Anim_Draw(activeDeathAnim, deathX, deathY);
+        }
 
         Anim_Draw(
             &chaseAnim,
@@ -1739,27 +1775,16 @@ static void Draw_World(void)
         float pinFeetY = PinFeetY(lane);
         float auraY = pinFeetY - runAnim.drawH / 2.0f;
 
-        /* Power-up effects behind the pin. */
-        if (invincibleTimer > 0.0f)
+        /* Effects that sit behind the pin. */
+        if (invincibleTimer > 0.0f && puFx[PU_INVINCIBLE].sheet == NULL)
         {
-            Draw_PowerFx(PU_INVINCIBLE, player_x, auraY);
-        }
-
-        if (shieldTimer > 0.0f)
-        {
-            Draw_PowerFx(PU_SHIELD, player_x, auraY);
+            Draw_PowerFx(PU_INVINCIBLE, player_x, auraY);   /* circle fallback */
         }
 
         if (magnetTimer > 0.0f)
         {
             Draw_PowerFx(PU_MAGNET, player_x, auraY);
         }
-
-        Anim_Draw(
-            &runAnim,
-            player_x,
-            pinFeetY - runAnim.drawH / 2.0f
-        );
 
         // Hit effect: flicker + knock-back
         int   player_alpha = 255;
@@ -1772,12 +1797,35 @@ static void Draw_World(void)
             player_draw_x = player_x - stumble_lurch * gameScale * frac;              // knocked back, then slides forward
         }
 
-        Anim_DrawAlpha(
-            &runAnim,
-            player_draw_x,
-            pinFeetY - runAnim.drawH / 2.0f,
-            player_alpha
-        );
+        /* Draw the pin ONCE. While invincible or shielded, the effect sheet already
+           contains the pin, so it is drawn instead of the normal run animation.
+           Its frame follows runAnim so the two never go out of sync. */
+        float pinCentreY = pinFeetY - runAnim.drawH / 2.0f;
+
+        if (invincibleTimer > 0.0f && puFx[PU_INVINCIBLE].sheet != NULL)
+        {
+            const Animation* inv = &puFx[PU_INVINCIBLE];
+            float invCentreY = pinFeetY - (INVINCIBLE_FEET_FRAC - 0.5f) * inv->drawH;
+
+            Anim_DrawFrame(inv, runAnim.currentFrame % inv->frameCount,
+                player_draw_x, invCentreY, player_alpha);
+        }
+        else if (shieldTimer > 0.0f && puFx[PU_SHIELD].sheet != NULL)
+        {
+            const Animation* sh = &puFx[PU_SHIELD];
+
+            Anim_DrawFrame(sh, runAnim.currentFrame % sh->frameCount,
+                player_draw_x, pinCentreY, player_alpha);
+        }
+        else
+        {
+            Anim_DrawAlpha(&runAnim, player_draw_x, pinCentreY, player_alpha);
+
+            if (shieldTimer > 0.0f)
+            {
+                Draw_PowerFx(PU_SHIELD, player_draw_x, auraY);   /* circle fallback */
+            }
+        }
 
         // keep the ball anchored at its existing position.
         Anim_Draw(
@@ -1787,14 +1835,6 @@ static void Draw_World(void)
             BALL_Y_OFFSET * gameScale -
             chaseAnim.drawH / 2.0f
         );
-        // keep the ball anchored at its existing position.
-        //Anim_Draw(
-        //    &chaseAnim,
-        //    enemyX,
-        //    enemyGround +
-        //    BALL_Y_OFFSET * gameScale -
-        //    chaseAnim.drawH / 2.0f
-        //);
     }
 
     /* Scoreboard. */
@@ -1894,139 +1934,6 @@ static void DrawPixelButton(float x, float y, float w, float h, const char* labe
 /* ============================================================
    Death screen
    ============================================================ */
-
-   //static void Draw_DeathScreen(void)
-   //{
-   //    float screenW = (float)CP_System_GetWindowWidth();
-   //    float screenH = (float)CP_System_GetWindowHeight();
-   //
-   //    float centerX = screenW * 0.5f;
-   //    float centerY = screenH * 0.5f;
-   //
-   //    float uiScale = fminf(
-   //        screenW / 1280.0f,
-   //        screenH / 720.0f
-   //    );
-   //
-   //    float buttonW = 240.0f * uiScale;
-   //    float buttonH = 70.0f * uiScale;
-   //    float buttonGap = 30.0f * uiScale;
-   //
-   //    float restartX =
-   //        centerX - (buttonW + buttonGap) / 2.0f;
-   //
-   //    float menuX =
-   //        centerX + (buttonW + buttonGap) / 2.0f;
-   //
-   //    float buttonY = centerY + 60.0f * uiScale;
-   //
-   //    CP_Settings_RectMode(CP_POSITION_CENTER);
-   //    CP_Settings_NoStroke();
-   //
-   //    /* Dim the frozen gameplay. */
-   //    CP_Settings_Fill(CP_Color_Create(0, 0, 0, 165));
-   //
-   //    CP_Graphics_DrawRect(
-   //        centerX,
-   //        centerY,
-   //        screenW,
-   //        screenH
-   //    );
-   //
-   //    /* Centered menu panel. */
-   //    CP_Settings_Fill(CP_Color_Create(20, 20, 25, 245));
-   //
-   //    CP_Graphics_DrawRect(
-   //        centerX,
-   //        centerY,
-   //        620.0f * uiScale,
-   //        300.0f * uiScale
-   //    );
-   //
-   //    if (deathFont != NULL)
-   //    {
-   //        CP_Font_Set(deathFont);
-   //    }
-   //
-   //    CP_Settings_TextAlignment(
-   //        CP_TEXT_ALIGN_H_CENTER,
-   //        CP_TEXT_ALIGN_V_MIDDLE
-   //    );
-   //
-   //    CP_Settings_TextSize(80.0f * uiScale);
-   //    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
-   //
-   //    CP_Font_DrawText(
-   //        "YOU DIED",
-   //        centerX,
-   //        centerY - 65.0f * uiScale
-   //    );
-   //
-   //    /* Restart button. */
-   //    CP_Settings_Fill(CP_Color_Create(100, 220, 100, 255));
-   //
-   //    CP_Graphics_DrawRect(
-   //        restartX,
-   //        buttonY,
-   //        buttonW,
-   //        buttonH
-   //    );
-   //
-   //    CP_Settings_Fill(CP_Color_Create(0, 0, 0, 255));
-   //    CP_Settings_TextSize(40.0f * uiScale);
-   //
-   //    CP_Font_DrawText("RESTART", restartX, buttonY);
-   //
-   //    /* Return-to-menu button. */
-   //    CP_Settings_Fill(CP_Color_Create(255, 80, 80, 255));
-   //
-   //    CP_Graphics_DrawRect(
-   //        menuX,
-   //        buttonY,
-   //        buttonW,
-   //        buttonH
-   //    );
-   //
-   //    CP_Settings_Fill(CP_Color_Create(0, 0, 0, 255));
-   //
-   //    CP_Font_DrawText("MAIN MENU", menuX, buttonY);
-   //
-   //    if (CP_Input_MouseTriggered(MOUSE_BUTTON_LEFT))
-   //    {
-   //        float mouseX = CP_Input_GetMouseX();
-   //        float mouseY = CP_Input_GetMouseY();
-   //
-   //        bool overRestart =
-   //            fabsf(mouseX - restartX) <= buttonW / 2.0f &&
-   //            fabsf(mouseY - buttonY) <= buttonH / 2.0f;
-   //
-   //        bool overMenu =
-   //            fabsf(mouseX - menuX) <= buttonW / 2.0f &&
-   //            fabsf(mouseY - buttonY) <= buttonH / 2.0f;
-   //
-   //        if (overRestart)
-   //        {
-   //            CP_Engine_SetNextGameStateForced(
-   //                Game_Init,
-   //                Game_Update,
-   //                Game_Exit
-   //            );
-   //
-   //            return;
-   //        }
-   //
-   //        if (overMenu)
-   //        {
-   //            CP_Engine_SetNextGameStateForced(
-   //                Main_Menu_Init,
-   //                Main_Menu_Update,
-   //                Main_Menu_Exit
-   //            );
-   //
-   //            return;
-   //        }
-   //    }
-   //}
 
 static void DrawTextWithOutline(
     const char* text,
@@ -2178,7 +2085,7 @@ void DeathScreen_Draw(const char* title) {
     float row2_y = row1_y + row_gap;
     float row3_y = row1_y + row_gap * 2.0f;
 
-    int shownScore = (int)score;
+    int shownScore = (int)(score * (float)scoreMultiplier);
 
     // High score
     DrawDiamondIcon(icon_x, row1_y);
@@ -2408,7 +2315,7 @@ void Game_Update(void)
 
         score += speed * dt / 100.0f;
 
-        int currentScore = (int)score;
+        int currentScore = (int)(score * (float)scoreMultiplier);
 
         if (currentScore > highScore)
         {
@@ -2612,6 +2519,43 @@ void Game_Update(void)
                 else if (coin_x[c] < -50.0f * gameScale)
                 {
                     coin_active[c] = false;
+                }
+            }
+
+            if (multiFx.sheet != NULL)
+            {
+                Anim_Update(&multiFx);
+            }
+
+            if (!multiplier_active)
+            {
+                multiplierSpawnTimer -= dt;
+
+                if (multiplierSpawnTimer <= 0.0f)
+                {
+                    SpawnMultiplier();
+                }
+            }
+            else
+            {
+                multiplier_x -= worldMove;
+
+                float sdx = player_x - multiplier_x;
+                float sdy = playerCentreY - multiplier_y;
+                float sdist = sqrtf(sdx * sdx + sdy * sdy);
+
+                if (sdist < MULT_COLLECT_DIST * gameScale)
+                {
+                    multiplier_active = false;
+
+                    if (scoreMultiplier < MAX_MULT)
+                    {
+                        scoreMultiplier++;
+                    }
+                }
+                else if (multiplier_x < -50.0f * gameScale)
+                {
+                    multiplier_active = false;
                 }
             }
         }
