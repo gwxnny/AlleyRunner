@@ -77,22 +77,22 @@ static int menuBallFrame = 0;
 #define MENU_CHASE_GAP 500.0f // original: 230
 
 // sprite sheet frame sizes and counts for the pin and ball.
-// pin sheet: 480 x 120, containing 4 frames.
+// source sprite-sheet frames: each frame is 500 x 500 pixels.
 #define MENU_PIN_FRAME_COUNT 4
-#define MENU_PIN_FRAME_W 120.0f
-#define MENU_PIN_FRAME_H 120.0f
-// ball sheet: 2000 x 250, containing 8 frames.
+#define MENU_PIN_FRAME_W 500.0f
+#define MENU_PIN_FRAME_H 500.0f
+
 #define MENU_BALL_FRAME_COUNT 8
-#define MENU_BALL_FRAME_W 250.0f
-#define MENU_BALL_FRAME_H 250.0f
+#define MENU_BALL_FRAME_W 500.0f
+#define MENU_BALL_FRAME_H 500.0f
 
 // smaller frame times make the animation faster. Adjust these values to change the speed of the pin and ball animations.
 #define MENU_PIN_FRAME_TIME 0.10f
 #define MENU_BALL_FRAME_TIME 0.08f
 
 // display frame size
-#define MENU_PIN_SIZE 240.0f // original: 120
-#define MENU_BALL_SIZE 750.0f // original: 250
+#define MENU_PIN_SIZE 120.0f
+#define MENU_BALL_SIZE 500.0f
 
 // menu states.
 static GameState currentRequestedState = STATE_MAIN_MENU;
@@ -1235,8 +1235,8 @@ static void DrawMenuChase(
 {
     float menuScale = windowH / 720.0f;
 
-    float pinSize = MENU_PIN_SIZE * menuScale;
-    float ballSize = MENU_BALL_SIZE * menuScale;
+    float pinSize = MENU_PIN_SIZE;
+    float ballSize = MENU_BALL_SIZE;
     float chaseGap = MENU_CHASE_GAP * menuScale;
 
     // pin animation.
@@ -1278,7 +1278,7 @@ static void DrawMenuChase(
     }
 
     float groundY = windowH * 0.90f;
-    float ballYOffset = 190.0f * menuScale;
+    float ballYOffset = 0.0f;
     float pinYOffset = 0.0f;
 
     CP_Settings_ImageMode(CP_POSITION_CENTER);
@@ -1453,13 +1453,13 @@ void Main_Menu_Init(void)
     }
 
     menuBall = CP_Image_Load(
-        "Assets/bowling_ball_chasing.png"
+        "Assets/venom_bowling_ball_chasing.png"
     );
 
     if (menuBall == NULL)
     {
         menuBall = CP_Image_Load(
-            "../Assets/bowling_ball_chasing.png"
+            "../Assets/venom_bowling_ball_chasing.png"
         );
     }
 
