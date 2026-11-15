@@ -89,8 +89,8 @@ static float gameScale = 1.0f;
 #define PLAYER_W 120.0f
 #define PLAYER_H 120.0f
 
-#define ENEMY_W 350.0f
-#define ENEMY_H 350.0f
+#define ENEMY_W 500.0f
+#define ENEMY_H 500.0f
 #define BALL_Y_OFFSET 140.0f
 
 #define GRAB_W 1000.0f
@@ -99,7 +99,7 @@ static float gameScale = 1.0f;
 #define ENEMY_BODY_X 96.0f
 #define GRAB_REACH   130.0f
 
-#define ENEMY_WALK_SPEED 250.0f
+#define ENEMY_WALK_SPEED 650.0f
 
 #define START_SPEED 800.0f
 #define SPEED_RAMP  10.0f
@@ -201,6 +201,8 @@ int obs_hit[MAX_OBS];
 float hurt_timer = 0.0f;
 CP_Sound sndHit;
 
+static float reviveAnimTimer = 0.0f;
+
 // Pause button (top right) and pause menu
 #define pause_button_size (60.0f * HUD_SCALE)
 #define pause_button_x    (WIN_W - 46.0f * HUD_SCALE)
@@ -227,8 +229,8 @@ static CP_Sound sndHeart = NULL;
    Rage overlay
    ============================================================ */
 
-   // stored font for the rage overlay text, 
-   // game_init() loads it once and keeps it in memory for the rest of the game.
+// stored font for the rage overlay text, 
+// game_init() loads it once and keeps it in memory for the rest of the game.
 static CP_Font rageFont = NULL;
 
 #define RAGE_QUIET_MIN_MS 6000 // minimum wait: 6 seconds
@@ -345,6 +347,7 @@ Animation runAnim;
 Animation chaseAnim;
 Animation grabAnim;
 
+static Animation reviveAnim;
 static GameplayPhase state;
 
 /* Background and scoreboard. */
@@ -362,6 +365,7 @@ static float score = 0.0f;
 static float distanceTimer = 0.0f;
 static int highScore = 0;
 static int highScoreAtStart = 0;
+static float deathHoldTimer = 0.0f;
 
 // results for the current run.
 static float runSurvivalSeconds = 0.0f;
@@ -412,6 +416,7 @@ static int coinCount = 0;
 
 /*Multiplier sprite sheets*/
 static Animation multiFx;
+static CP_Image multiplierItemImg = NULL;
 
 /* Star pickup and the score multiplier it raises. */
 static bool  multiplier_active = false;
@@ -524,6 +529,28 @@ static void Anim_SetDrawSize(Animation* a, float w, float h)
 {
     a->drawW = w;
     a->drawH = h;
+}
+
+static void Anim_FitHorizontalSheet(Animation* a, float drawHeight)
+{
+    if (a == NULL || a->sheet == NULL || a->frameCount <= 0)
+    {
+        return;
+    }
+
+    int sheetWidth = CP_Image_GetWidth(a->sheet);
+    int sheetHeight = CP_Image_GetHeight(a->sheet);
+
+    if (sheetWidth <= 0 || sheetHeight <= 0)
+    {
+        return;
+    }
+
+    a->frameW = (float)sheetWidth / (float)a->frameCount;
+    a->frameH = (float)sheetHeight;
+
+    a->drawH = drawHeight;
+    a->drawW = drawHeight * (a->frameW / a->frameH);
 }
 
 void Anim_Reset(Animation* a)
@@ -682,6 +709,8 @@ int Game_GetHighScore(void)
 void StartRun(void)
 {
     state = STATE_PLAYING;
+	enemyGround = PinFeetY(1); // set the initial ball ground position explicitly to the middle lane.
+    reviveAnimTimer = 0.0f;
 
     runSurvivalSeconds = 0.0f;  // start this run's timer at zero.
     runDeathCause = "unknown";  // no fatal obstacle yet.
@@ -694,6 +723,7 @@ void StartRun(void)
     distance = 0;
     distanceTimer = 0.0f;
     highScoreAtStart = highScore;
+    deathHoldTimer = 0.0f;
 
     invincibleTimer = 0.0f;
     shieldTimer = 0.0f;
@@ -722,7 +752,8 @@ void StartRun(void)
     multiplierSpawnTimer = CP_Random_RangeFloat(MULT_SPAWN_MIN, MULT_SPAWN_MAX);
     scoreMultiplier = 1;
 
-    enemyX = (float)width * 0.12f;
+    // centre on the left edge: roughly half the ball is visible.
+    enemyX = 0.0f;
     enemyGround = PinFeetY(lane);
 
     Anim_Reset(&runAnim);
@@ -749,7 +780,8 @@ static void PlayDeathAudio(void)
 /* Ball catches the pin (barrier deaths, or when there is no death art yet). */
 static void KillPlayer(void)
 {
-    state = STATE_ENEMY_WALK;
+    state = STATE_GRAB;
+    Anim_Reset(&grabAnim);
     PlayDeathAudio();
 }
 
@@ -789,7 +821,7 @@ static const SheetInfo puFxInfo[NUM_POWERUPS] =
 {
     { "../Assets/invincible_anim.png", 4, 384.0f, 426.0f, 0.15f },
     { "../Assets/pixil-layer-Pin Shield (500).png",     4, 500.0f, 500.0f, 0.10f },
-    { "../Assets/fx_magnet.png",     6, 128.0f, 128.0f, 0.10f }
+    { "../Assets/pixil-layer-Magnet-animation.png", 4, 120.0f, 120.0f, 0.15f }
 };
 
 static const char* puLabels[NUM_POWERUPS] = { "I", "S", "M" };
@@ -1250,10 +1282,14 @@ static void Draw_Pickups(void)
         float bob = sinf(CP_System_GetSeconds() * 5.0f) * 6.0f * gameScale;
         float s = HEART_PICKUP_SIZE * gameScale;
         float y = PlayerCenterY(heart_lane) + bob;
-
         if (heartPickupImg != NULL)
         {
             CP_Image_Draw(heartPickupImg, heart_x, y, s, s, 255);
+        }
+        else if (heart_full != NULL)
+        {
+            // Fallback to the regular heart image if ExtraLife item failed to load
+            CP_Image_Draw(heart_full, heart_x, y, s, s, 255);
         }
     }
 
@@ -1334,6 +1370,13 @@ static void Draw_Roulette(void)
 /* Multiplier sprite sheet, or a plain circle if it's missing. */
 static void Draw_Multiplier(float x, float y)
 {
+    float size = MULT_SIZE * gameScale;
+    if (multiplierItemImg != NULL)
+    {
+        CP_Image_Draw(multiplierItemImg, x, y, size, size, 255);
+        return;
+    }
+
     if (multiFx.sheet != NULL)
     {
         Anim_Draw(&multiFx, x, y);
@@ -1342,8 +1385,7 @@ static void Draw_Multiplier(float x, float y)
 
     CP_Settings_NoStroke();
     CP_Settings_Fill(CP_Color_Create(255, 0, 0, 90));
-    CP_Graphics_DrawCircle(x, y, MULT_SIZE * gameScale);
-
+    CP_Graphics_DrawCircle(x, y, size);
 }
 
 static void DrawHUDPanel(
@@ -2012,6 +2054,8 @@ void Game_Init(void)
     heart_full = CP_Image_Load("../Assets/hearts.png");
 
     hudCoinImage = CP_Image_Load("../Assets/Coin_solo.png");
+    multiplierItemImg = CP_Image_Load("../Assets/pixil-layer-multiplier-ball-item.png");
+    if (multiplierItemImg == NULL) multiplierItemImg = CP_Image_Load("Assets/pixil-layer-multiplier-ball-item.png");
 
     if (hudCoinImage == NULL)
     {
@@ -2019,7 +2063,11 @@ void Game_Init(void)
     }
 
     // [ADDED BY LEKKAR] Load heart pickup image
-    heartPickupImg = CP_Image_Load("../Assets/hearts.png");
+    heartPickupImg = CP_Image_Load("../Assets/pixil-layer-ExtraLife-item.png");
+    if (heartPickupImg == NULL)
+        heartPickupImg = CP_Image_Load("Assets/pixil-layer-ExtraLife-item.png");
+    if (heartPickupImg == NULL)
+        heartPickupImg = CP_Image_Load("./Assets/pixil-layer-ExtraLife-item.png");
 
     // [ADDED BY GWEN] rage words font: try the relative path first, then the local path if that fails.
     rageFont = CP_Font_Load("../Assets/VT323-Regular.ttf");
@@ -2052,28 +2100,14 @@ void Game_Init(void)
     }
 
     // Updated character sprite sheets.
-    Anim_Init(&runAnim, "../Assets/pixil-layer-Pin Running.png", 4, PLAYER_W, PLAYER_H, 0.15f, 1);
-    Anim_Init(&chaseAnim, "../Assets/pixil-layer-Ball Rolling (350).png", 8, ENEMY_W, ENEMY_H, 0.15f, 1);
-    Anim_Init(&grabAnim, "../Assets/pixil-layer-0 (3).png", 8, 2000, 1000, DEATH_FRAME_TIME, 0);
+    Anim_Init(&runAnim, "../Assets/bowling_pin_running.png", 4, PLAYER_W, PLAYER_H, 0.15f, 1);
+    Anim_Init(&chaseAnim, "../Assets/bowling_ball_chasing.png", 8, ENEMY_W, ENEMY_H, 0.15f, 1);
+    Anim_Init(&grabAnim, "../Assets/pin_death_by_ball.png", 7, 1000.0f, 500.0f, DEATH_FRAME_TIME, 0 );
 
-    /* scale character display sizes with the window height. */
-    Anim_SetDrawSize(
-        &runAnim,
-        PLAYER_W * gameScale,
-        PLAYER_H * gameScale
-    );
-
-    Anim_SetDrawSize(
-        &chaseAnim,
-        ENEMY_W * gameScale,
-        ENEMY_H * gameScale
-    );
-
-    Anim_SetDrawSize(
-        &grabAnim,
-        GRAB_W * gameScale * DEATH_SCALE,
-        GRAB_H * gameScale * DEATH_SCALE
-    );
+	/* scale character display sizes with the game window */
+    Anim_SetDrawSize(&runAnim, 120.0f, 120.0f);
+    Anim_SetDrawSize(&chaseAnim, 500.0f, 500.0f);
+    Anim_SetDrawSize(&grabAnim, 1000.0f, 500.0f);
 
     /* Obstacle images. */
     for (int t = 0; t < NUM_OBS_TYPES; t++)
@@ -2090,14 +2124,16 @@ void Game_Init(void)
 
         // limit the obstacle height to 38% of a lane's height.
         float obstacleHeight = lane_gap * 0.6f;
-        float obstacleWidth =
-            obstacleHeight * (OBS_SRC_W / OBS_SRC_H);
+        float obstacleWidth = obstacleHeight * (OBS_SRC_W / OBS_SRC_H);
 
-        Anim_SetDrawSize(
-            &obsAnim[t],
-            obstacleWidth,
-            obstacleHeight
-        );
+        for (int t = 0; t < NUM_OBS_TYPES; ++t)
+        {
+            Anim_SetDrawSize(
+                &obsAnim[t],
+                obstacleWidth,
+                obstacleHeight
+            );
+        }
     }
 
     /* Obstacle event animations, drawn at the obstacle's size. */
@@ -2137,6 +2173,11 @@ void Game_Init(void)
             1
         );
 
+        if (puFx[t].sheet == NULL && puFxInfo[t].path[0] == '.' && puFxInfo[t].path[1] == '.')
+        {
+            puFx[t].sheet = CP_Image_Load(puFxInfo[t].path + 3);
+        }
+
         Anim_SetDrawSize(
             &puIconAnim[t],
             PU_SIZE * gameScale * (puIconInfo[t].w / puIconInfo[t].h),
@@ -2156,21 +2197,54 @@ void Game_Init(void)
         float fxH = PU_FX_SIZE * gameScale;
         float fxW = fxH * (puFxInfo[t].w / puFxInfo[t].h);
 
-        if (t == PU_SHIELD)
-        {
-            fxW = runAnim.drawW;   /* same size as the pin */
+        if (t == PU_SHIELD || t == PU_MAGNET) {
+            fxW = runAnim.drawW;
             fxH = runAnim.drawH;
         }
-        else if (t == PU_INVINCIBLE)
-        {
-            fxH = runAnim.drawH * INVINCIBLE_ANIM_SCALE;
+        else if (t == PU_INVINCIBLE) {
+            fxH = runAnim.drawH * INVINCIBLE_ANIM_SCALE; // same size as the pin
             fxW = fxH * (puFxInfo[t].w / puFxInfo[t].h);
         }
 
         Anim_SetDrawSize(&puFx[t], fxW, fxH);
     }
 
-    /* Mystery box shown in the lane before the power-up is picked up. */
+    // Revive extra-life angel pin animation: load once.
+    Anim_Init(
+        &reviveAnim,
+        "../Assets/pixil-layer-ExtraLife-animation.png",
+        4,
+        120.0f,
+        120.0f,
+        0.15f,
+        1
+    );
+
+    if (reviveAnim.sheet == NULL)
+    {
+        reviveAnim.sheet = CP_Image_Load(
+            "Assets/pixil-layer-ExtraLife-animation.png"
+        );
+    }
+
+    if (reviveAnim.sheet == NULL)
+    {
+        reviveAnim.sheet = CP_Image_Load(
+            "./Assets/pixil-layer-ExtraLife-animation.png"
+        );
+    }
+
+    Anim_FitHorizontalSheet(
+        &puFx[PU_MAGNET],
+        runAnim.drawH
+    );
+
+    Anim_FitHorizontalSheet(
+        &reviveAnim,
+        runAnim.drawH
+    );;
+
+    // Mystery box shown in the lane before the power-up is picked up.
     Anim_Init(
         &boxAnim,
         "../Assets/mystery_box.png",
@@ -2266,13 +2340,22 @@ static void Draw_World(void)
 
     if (state == STATE_GRAB)
     {
-        float k = DEATH_SCALE * gameScale;
+        float scaleX = grabAnim.drawW / grabAnim.frameW;
+        float scaleY = grabAnim.drawH / grabAnim.frameH;
 
-        /* the running pin's feet sit about 7px above its frame bottom */
-        float feetY = PinFeetY(lane) - 7.0f * gameScale;
+        // approximate pin anchor in the first frame of this death sheet.
+        const float sourcePinX = 733.0f;
+        const float sourcePinFeetY = 475.0f;
 
-        float cx = player_x + (GRAB_W / 2.0f - DEATH_PIN_SRC_X) * k;
-        float cy = feetY - (DEATH_PIN_SRC_FEET - GRAB_H / 2.0f) * k;
+        // the running pin has a little padding below its feet.
+        float runningFeetY =
+            PinFeetY(lane) - 7.0f * (runAnim.drawH / PLAYER_H);
+
+        float cx = player_x
+            + (grabAnim.frameW * 0.5f - sourcePinX) * scaleX;
+
+        float cy = runningFeetY
+            + (grabAnim.frameH * 0.5f - sourcePinFeetY) * scaleY;
 
         Anim_Draw(&grabAnim, cx, cy);
     }
@@ -2299,9 +2382,9 @@ static void Draw_World(void)
         Anim_Draw(
             &chaseAnim,
             enemyX,
-            enemyGround +
-            BALL_Y_OFFSET * gameScale -
-            chaseAnim.drawH / 2.0f
+            enemyGround
+            - 7.0f * (runAnim.drawH / PLAYER_H)
+            - chaseAnim.drawH * 0.22f
         );
     }
     else
@@ -2315,7 +2398,8 @@ static void Draw_World(void)
             Draw_PowerFx(PU_INVINCIBLE, player_x, auraY);   /* circle fallback */
         }
 
-        if (magnetTimer > 0.0f)
+		if (magnetTimer > 0.0f && // draw the magnet effect circle behind the pin if the animation is missing
+            puFx[PU_MAGNET].sheet == NULL)
         {
             Draw_PowerFx(PU_MAGNET, player_x, auraY);
         }
@@ -2331,43 +2415,88 @@ static void Draw_World(void)
             player_draw_x = player_x - stumble_lurch * gameScale * frac;              // knocked back, then slides forward
         }
 
-        /* Draw the pin ONCE. While invincible or shielded, the effect sheet already
-           contains the pin, so it is drawn instead of the normal run animation.
-           Its frame follows runAnim so the two never go out of sync. */
         float pinCentreY = pinFeetY - runAnim.drawH / 2.0f;
 
-        if (invincibleTimer > 0.0f && puFx[PU_INVINCIBLE].sheet != NULL)
+        if (reviveAnimTimer > 0.0f &&
+            reviveAnim.sheet != NULL &&
+            reviveAnim.frameCount > 0)
+        {
+            float reviveCentreY = pinFeetY - reviveAnim.drawH / 2.0f;
+
+            Anim_DrawFrame(
+                &reviveAnim,
+                runAnim.currentFrame % reviveAnim.frameCount,
+                player_draw_x,
+                reviveCentreY,
+                player_alpha
+            );
+        }
+        else if (invincibleTimer > 0.0f &&
+            puFx[PU_INVINCIBLE].sheet != NULL &&
+            puFx[PU_INVINCIBLE].frameCount > 0)
         {
             const Animation* inv = &puFx[PU_INVINCIBLE];
-            float invCentreY = pinFeetY - (INVINCIBLE_FEET_FRAC - 0.5f) * inv->drawH;
 
-            Anim_DrawFrame(inv, runAnim.currentFrame % inv->frameCount,
-                player_draw_x, invCentreY, player_alpha);
+            float invCentreY =
+                pinFeetY - (INVINCIBLE_FEET_FRAC - 0.5f) * inv->drawH;
+
+            Anim_DrawFrame(
+                inv,
+                runAnim.currentFrame % inv->frameCount,
+                player_draw_x,
+                invCentreY,
+                player_alpha
+            );
         }
-        else if (shieldTimer > 0.0f && puFx[PU_SHIELD].sheet != NULL)
+        else if (shieldTimer > 0.0f &&
+            puFx[PU_SHIELD].sheet != NULL &&
+            puFx[PU_SHIELD].frameCount > 0)
         {
             const Animation* sh = &puFx[PU_SHIELD];
 
-            Anim_DrawFrame(sh, runAnim.currentFrame % sh->frameCount,
-                player_draw_x, pinCentreY, player_alpha);
+            float shieldCentreY = pinFeetY - sh->drawH / 2.0f;
+
+            Anim_DrawFrame(
+                sh,
+                runAnim.currentFrame % sh->frameCount,
+                player_draw_x,
+                shieldCentreY,
+                player_alpha
+            );
+        }
+        else if (magnetTimer > 0.0f &&
+            puFx[PU_MAGNET].sheet != NULL &&
+            puFx[PU_MAGNET].frameCount > 0)
+        {
+            const Animation* mg = &puFx[PU_MAGNET];
+
+            float magnetCentreY = pinFeetY - mg->drawH / 2.0f;
+
+            Anim_DrawFrame(
+                mg,
+                runAnim.currentFrame % mg->frameCount,
+                player_draw_x,
+                magnetCentreY,
+                player_alpha
+            );
         }
         else
         {
-            Anim_DrawAlpha(&runAnim, player_draw_x, pinCentreY, player_alpha);
-
-            if (shieldTimer > 0.0f)
-            {
-                Draw_PowerFx(PU_SHIELD, player_draw_x, auraY);   /* circle fallback */
-            }
+            Anim_DrawAlpha(
+                &runAnim,
+                player_draw_x,
+                pinCentreY,
+                player_alpha
+            );
         }
 
         // keep the ball anchored at its existing position.
         Anim_Draw(
             &chaseAnim,
             enemyX,
-            enemyGround +
-            BALL_Y_OFFSET * gameScale -
-            chaseAnim.drawH / 2.0f
+            enemyGround
+            - 7.0f * (runAnim.drawH / PLAYER_H)
+            - chaseAnim.drawH * 0.5f
         );
     }
 
@@ -3092,6 +3221,9 @@ void Game_Update(void)
             shieldTimer = fmaxf(0.0f, shieldTimer - dt);
             magnetTimer = fmaxf(0.0f, magnetTimer - dt);
 
+            if (reviveAnimTimer > 0.0f)
+                reviveAnimTimer -= dt;
+
             Anim_Update(&coinAnim);
             Anim_Update(&boxAnim);
 
@@ -3233,6 +3365,7 @@ void Game_Update(void)
                     }
 
                     heart_active = false;
+                    reviveAnimTimer = 1.5f; // show angel pin for 1.5 seconds!
 
                     if (sndHeart != NULL)
                     {
@@ -3296,6 +3429,13 @@ void Game_Update(void)
             }
         }
 
+        // follow the player's lane while remaining halfway off-screen.
+        if (state == STATE_PLAYING)
+        {
+            enemyX = 0.0f;
+            enemyGround = PinFeetY(lane);
+        }
+
         Anim_Update(&runAnim);
         Anim_Update(&chaseAnim);
 
@@ -3315,32 +3455,8 @@ void Game_Update(void)
     }
     else if (state == STATE_ENEMY_WALK)
     {
-        Anim_Update(&chaseAnim);
-
-        float targetX = player_x - GRAB_REACH * gameScale;
-        float targetY = PinFeetY(lane);
-
-        float dx = targetX - enemyX;
-        float dy = targetY - enemyGround;
-
-        float dist = sqrtf(dx * dx + dy * dy);
-        //float step = ENEMY_WALK_SPEED * dt;
-        float step = ENEMY_WALK_SPEED * gameScale * dt;
-
-        if (dist <= step)
-        {
-            enemyX = targetX;
-            enemyGround = targetY;
-
-            state = STATE_GRAB;
-
-            Anim_Reset(&grabAnim);
-        }
-        else
-        {
-            enemyX += dx / dist * step;
-            enemyGround += dy / dist * step;
-        }
+        state = STATE_GRAB;
+        Anim_Reset(&grabAnim);
     }
     else
     {
@@ -3372,19 +3488,19 @@ void Game_Update(void)
         RageOverlay_Draw();
     }
 
-    bool grabDone =
-        state == STATE_GRAB &&
-        grabAnim.currentFrame == grabAnim.frameCount - 1;
-
-    bool dyingDone =
-        state == STATE_DYING &&
+    bool grabDone = (state == STATE_GRAB &&
+        grabAnim.currentFrame >= grabAnim.frameCount - 1);
+    bool dyingDone = (state == STATE_DYING &&
         activeDeathAnim != NULL &&
-        activeDeathAnim->currentFrame == activeDeathAnim->frameCount - 1;
+        activeDeathAnim->currentFrame >= activeDeathAnim->frameCount - 1);
 
     if (grabDone || dyingDone)
     {
-        //Draw_DeathScreen();
-        show_death_screen = 1;
+        deathHoldTimer += dt;
+        if (deathHoldTimer >= 0.45f)
+        {
+            show_death_screen = 1;
+        }
     }
 
     /* ---------- Death screen input ---------- */
@@ -3477,6 +3593,12 @@ void Game_Exit(void)
         heartPickupImg = NULL;
     }
 
+    if (multiplierItemImg != NULL)
+    {
+        CP_Image_Free(multiplierItemImg);
+        multiplierItemImg = NULL;
+    }
+
     if (sndHeart != NULL)
     {
         CP_Sound_Free(sndHeart);
@@ -3560,6 +3682,12 @@ void Game_Exit(void)
     {
         CP_Image_Free(hudCoinImage);
         hudCoinImage = NULL;
+    }
+
+    if (reviveAnim.sheet != NULL)
+    {
+        CP_Image_Free(reviveAnim.sheet);
+        reviveAnim.sheet = NULL;
     }
 
     rageEventActive = false;
