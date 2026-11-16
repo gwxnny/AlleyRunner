@@ -455,9 +455,9 @@ static Animation obsAnim[NUM_OBS_TYPES];
 
 static const char* obsPaths[NUM_OBS_TYPES] =
 {
-    "../Assets/barrier.png",
-    "../Assets/Oil Bubble.png",
-    "../Assets/hole.png"
+    "Assets/barrier.png",
+    "Assets/Oil Bubble.png",
+    "Assets/hole.png"
 };
 
 // obstacle animation data (shared sprite sheet, one frame counter per obstacle). 
@@ -471,10 +471,10 @@ typedef struct
 } FxSheetInfo;
 
 /* Edit path / frame count / frame size / speed when the art is ready. */
-static const FxSheetInfo oilSpawnInfo = { "../Assets/Oil Bubble.png",      4, 500.0f, 500.0f, 0.08f };
-static const FxSheetInfo barrierBreakInfo = { "../Assets/Barrier Break.png",  4, 500.0f, 500.0f, 0.07f };
-static const FxSheetInfo holeDeathInfo = { "../Assets/Hole Fall.png", 5, 500.0f, 500.0f, 0.10f };
-static const FxSheetInfo oilDeathInfo = { "../Assets/Pin Fall.png",  4, 500.0f, 500.0f, 0.10f };
+static const FxSheetInfo oilSpawnInfo = { "Assets/Oil Bubble.png",      4, 500.0f, 500.0f, 0.08f };
+static const FxSheetInfo barrierBreakInfo = { "Assets/Barrier Break.png",  4, 500.0f, 500.0f, 0.07f };
+static const FxSheetInfo holeDeathInfo = { "Assets/Hole Fall.png", 5, 500.0f, 500.0f, 0.10f };
+static const FxSheetInfo oilDeathInfo = { "Assets/Pin Fall.png",  4, 500.0f, 500.0f, 0.10f };
 
 /* The oil spawn animation starts once the whole spill is on screen
    (fraction of the screen width; 1.0 = as soon as it is fully visible). */
@@ -816,17 +816,17 @@ typedef struct
 /* Pickup icons (the item sitting in the lane). Edit to match your art. */
 static const SheetInfo puIconInfo[NUM_POWERUPS] =
 {
-    { "../Assets/invincible.PNG",    1, 640.0f, 640.0f, 0.12f },
-    { "../Assets/pickup_shield.png", 1, 500.0f, 500.0f, 0.12f },
-    { "../Assets/magnet.PNG",        1, 640.0f, 640.0f, 0.12f }
+    { "Assets/invincible.PNG",    1, 640.0f, 640.0f, 0.12f },
+    { "Assets/pickup_shield.png", 1, 500.0f, 500.0f, 0.12f },
+    { "Assets/magnet.PNG",        1, 640.0f, 640.0f, 0.12f }
 };
 
 /* Effects drawn on the pin (they all loop). */
 static const SheetInfo puFxInfo[NUM_POWERUPS] =
 {
-    { "../Assets/invincible_anim.png", 4, 384.0f, 426.0f, 0.15f },
-    { "../Assets/Pin Shield.png",     4, 500.0f, 500.0f, 0.10f },
-    { "../Assets/Magnet-animation.png", 4, 120.0f, 120.0f, 0.15f }
+    { "Assets/invincible_anim.png", 4, 384.0f, 426.0f, 0.15f },
+    { "Assets/Pin Shield.png",     4, 500.0f, 500.0f, 0.10f },
+    { "Assets/Magnet-animation.png", 4, 120.0f, 120.0f, 0.15f }
 };
 
 static const char* puLabels[NUM_POWERUPS] = { "I", "S", "M" };
@@ -2058,10 +2058,10 @@ void Game_Init(void)
     player_x = (float)width * 0.4f;
 
     /*Hearts*/
-    heart_full = CP_Image_Load("../Assets/hearts.png");
+    heart_full = CP_Image_Load("Assets/hearts.png");
 
-    hudCoinImage = CP_Image_Load("../Assets/Coin_solo.png");
-    multiplierItemImg = CP_Image_Load("../Assets/multiplier-ball-item.png");
+    hudCoinImage = CP_Image_Load("Assets/Coin_solo.png");
+    multiplierItemImg = CP_Image_Load("Assets/multiplier-ball-item.png");
     if (multiplierItemImg == NULL) multiplierItemImg = CP_Image_Load("Assets/multiplier-ball-item.png");
 
     if (hudCoinImage == NULL)
@@ -2070,14 +2070,14 @@ void Game_Init(void)
     }
 
     // [ADDED BY LEKKAR] Load heart pickup image
-    heartPickupImg = CP_Image_Load("../Assets/ExtraLife-item.png");
+    heartPickupImg = CP_Image_Load("Assets/ExtraLife-item.png");
     if (heartPickupImg == NULL)
         heartPickupImg = CP_Image_Load("Assets/ExtraLife-item.png");
     if (heartPickupImg == NULL)
         heartPickupImg = CP_Image_Load("./Assets/ExtraLife-item.png");
 
     // [ADDED BY GWEN] rage words font: try the relative path first, then the local path if that fails.
-    rageFont = CP_Font_Load("../Assets/VT323-Regular.ttf");
+    rageFont = CP_Font_Load("Assets/VT323-Regular.ttf");
 
     if (rageFont == NULL)
     {
@@ -2085,24 +2085,24 @@ void Game_Init(void)
     }
 
     /* Background. */
-    bgImage = CP_Image_Load("../Assets/background.png");
+    bgImage = CP_Image_Load("Assets/background.png");
 
     /*Score Borders*/
-    borderImage = CP_Image_Load("../Assets/background.png");
+    borderImage = CP_Image_Load("Assets/background.png");
 
 
     /* Gameplay audio. */
-    sndJump = CP_Sound_Load("../Assets/jump.mp3");
-    sndCoin = CP_Sound_Load("../Assets/coin_pickup.mp3");
-    sndDeath = CP_Sound_Load("../Assets/game_over.mp3");
-    gameMusic = CP_Sound_Load("../Assets/bg_music.mp3");
-    sndHit = CP_Sound_Load("../Assets/edr-video-game-hit-noise-001-135821.mp3");
-    sndRouletteSpin = CP_Sound_Load("../Assets/roulette_spin.wav");
-    sndRouletteReveal = CP_Sound_Load("../Assets/roulette_reveal.wav");
-    sndMultiplier = CP_Sound_Load("../Assets/multiplier_sound.mp3");
+    sndJump = CP_Sound_Load("Assets/jump.mp3");
+    sndCoin = CP_Sound_Load("Assets/coin_pickup.mp3");
+    sndDeath = CP_Sound_Load("Assets/game_over.mp3");
+    gameMusic = CP_Sound_Load("Assets/bg_music.mp3");
+    sndHit = CP_Sound_Load("Assets/edr-video-game-hit-noise-001-135821.mp3");
+    sndRouletteSpin = CP_Sound_Load("Assets/roulette_spin.wav");
+    sndRouletteReveal = CP_Sound_Load("Assets/roulette_reveal.wav");
+    sndMultiplier = CP_Sound_Load("Assets/multiplier_sound.mp3");
 
     // [ADDED BY LEKKAR] Load heart pickup sound
-    sndHeart = CP_Sound_Load("../Assets/heart_sound.mp3");
+    sndHeart = CP_Sound_Load("Assets/heart_sound.mp3");
 
     if (gameMusic != NULL)
     {
@@ -2110,9 +2110,9 @@ void Game_Init(void)
     }
 
     // Updated character sprite sheets.
-    Anim_Init(&runAnim, "../Assets/bowling_pin_running.png", 4, PLAYER_W, PLAYER_H, 0.15f, 1);
-    Anim_Init(&chaseAnim, "../Assets/bowling_ball_chasing.png", 8, ENEMY_W, ENEMY_H, 0.15f, 1);
-    Anim_Init(&grabAnim, "../Assets/pin_death_by_ball.png", 7, 1000.0f, 500.0f, DEATH_FRAME_TIME, 0 );
+    Anim_Init(&runAnim, "Assets/bowling_pin_running.png", 4, PLAYER_W, PLAYER_H, 0.15f, 1);
+    Anim_Init(&chaseAnim, "Assets/bowling_ball_chasing.png", 8, ENEMY_W, ENEMY_H, 0.15f, 1);
+    Anim_Init(&grabAnim, "Assets/pin_death_by_ball.png", 7, 1000.0f, 500.0f, DEATH_FRAME_TIME, 0 );
 
 	/* scale character display sizes with the game window */
     Anim_SetDrawSize(&runAnim, 120.0f, 120.0f);
@@ -2166,7 +2166,7 @@ void Game_Init(void)
     activeDeathAnim = NULL;
 
     /* Coin animation (one shared animation for every coin). */
-    Anim_Init(&coinAnim, "../Assets/Coin.png", COIN_FRAMES, COIN_SRC_W, COIN_SRC_H, COIN_FRAME_TIME, 1);
+    Anim_Init(&coinAnim, "Assets/Coin.png", COIN_FRAMES, COIN_SRC_W, COIN_SRC_H, COIN_FRAME_TIME, 1);
 
     Anim_SetDrawSize(&coinAnim, COIN_SIZE * gameScale * (COIN_SRC_W / COIN_SRC_H), COIN_SIZE * gameScale);
 
@@ -2222,7 +2222,7 @@ void Game_Init(void)
     // Revive extra-life angel pin animation: load once.
     Anim_Init(
         &reviveAnim,
-        "../Assets/ExtraLife-animation.png",
+        "Assets/ExtraLife-animation.png",
         4,
         120.0f,
         120.0f,
@@ -2255,7 +2255,7 @@ void Game_Init(void)
     );;
 
     // Mystery box shown in the lane before the power-up is picked up.
-    boxImg = CP_Image_Load("../Assets/mysterybox-item.png");
+    boxImg = CP_Image_Load("Assets/mysterybox-item.png");
     if (boxImg == NULL) boxImg = CP_Image_Load("Assets/mysterybox-item.png");
 
     /* Scale initial spacing along with the obstacle sizes. */
@@ -2271,7 +2271,7 @@ void Game_Init(void)
 
     /* Score and death-screen fonts. */
     scoreFont =
-        CP_Font_Load("../Assets/PressStart2P-Regular.ttf");
+        CP_Font_Load("Assets/PressStart2P-Regular.ttf");
 
     if (scoreFont == NULL)
     {
@@ -3336,7 +3336,6 @@ void Game_Update(void)
                     coin_active[c] = false;
 
                     coinCount++;
-                    score += (float)COIN_SCORE;
                 }
                 else if (coin_x[c] < -50.0f * gameScale)
                 {
