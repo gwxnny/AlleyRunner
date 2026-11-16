@@ -1,7 +1,2 @@
 ﻿  game.c
-  main.c
-  mainmenu.c
-  telemetry.c
-  utils.c
-  Generating Code...
-  AlleyRunner.vcxproj -> C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\x64\Debug\AlleyRunner.exe
+  AlleyRunner.vcxproj -> C:\Users\isaac\Documents\GitHub\AlleyRunner\x64\Debug\AlleyRunner.exe
