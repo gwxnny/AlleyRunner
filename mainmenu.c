@@ -91,7 +91,7 @@ static int menuBallFrame = 0;
 #define MENU_BALL_FRAME_TIME 0.08f
 
 // display frame size
-#define MENU_PIN_SIZE 120.0f
+#define MENU_PIN_SIZE 250.0f
 #define MENU_BALL_SIZE 500.0f
 
 // menu states.

@@ -58,8 +58,11 @@ static CP_Sound sndJump = NULL;
 static CP_Sound sndCoin = NULL;
 static CP_Sound gameMusic = NULL;
 static CP_Sound sndDeath = NULL;
+static CP_Sound sndRouletteSpin = NULL;
+static CP_Sound sndRouletteReveal = NULL;
+static CP_Sound sndMultiplier = NULL;
 
-#define JUMP_VOL  1.0f
+#define JUMP_VOL  0.5f
 #define DEATH_VOL 1.0f
 #define COIN_VOL 1.0f
 
@@ -101,8 +104,9 @@ static float gameScale = 1.0f;
 
 #define ENEMY_WALK_SPEED 650.0f
 
-#define START_SPEED 800.0f
-#define SPEED_RAMP  10.0f
+#define START_SPEED 600.0f
+#define SPEED_RAMP  5.0f
+#define DISTANCE_DIVISOR 40.0f   /* lower = distance grows faster */
 
 #define FEET_OFFSET 80.0f
 
@@ -123,8 +127,8 @@ static float gameScale = 1.0f;
 
    /* Mystery box (what the pickup looks like in the lane) and the item roulette. */
 #define BOX_FRAMES      4
-#define BOX_W           64.0f
-#define BOX_H           64.0f
+#define BOX_W           500.0f
+#define BOX_H           500.0f
 #define BOX_TIME        0.12f
 #define ROULETTE_TIME   1.5f /* seconds the icons spin after the box is picked up */
 #define REVEAL_TIME     0.8f /* seconds the final power-up stays shown */
@@ -146,11 +150,12 @@ static float gameScale = 1.0f;
 
 
 /* Multiplier: each one picked up raises the score multiplier. */
-#define MULT_SIZE         90.0f   /* drawn size */
-#define MULT_SPAWN_MIN    8.0f    /* seconds between stars */
-#define MULT_SPAWN_MAX    12.0f
+#define MULT_SIZE         70.0f   /* drawn size */
+#define MULT_SPAWN_MIN    20.0f    /* seconds between stars */
+#define MULT_SPAWN_MAX    50.0f
 #define MULT_COLLECT_DIST 60.0f
 #define MAX_MULT     5
+
 
 
 #define MAGNET_RANGE      450.0f
@@ -217,11 +222,11 @@ int is_paused = 0;
 //Hearts Spawn
 #define HEART_SPAWN_MIN   5.0f   /* seconds between heart spawns */
 #define HEART_SPAWN_MAX   8.0f
-#define HEART_PICKUP_SIZE 60.0f   /* drawn size */
+#define HEART_PICKUP_SIZE 120.0f   /* drawn size */
 #define HEART_PICKUP_DIST 60.0f   /* collect distance */
 #define HEART_FIRST_DELAY_MIN 3.0f   /* seconds after losing a heart */
 #define HEART_FIRST_DELAY_MAX 6.0f
-#define HEART_VOL 1.0f
+#define HEART_VOL 0.8f
 
 static CP_Sound sndHeart = NULL;
 
@@ -362,7 +367,7 @@ static CP_Font deathFont = NULL;
 
 static int distance = 0;
 static float score = 0.0f;
-static float distanceTimer = 0.0f;
+static float distanceMetres = 0.0f;
 static int highScore = 0;
 static int highScoreAtStart = 0;
 static float deathHoldTimer = 0.0f;
@@ -395,7 +400,7 @@ static float heartSpawnTimer = 0.0f;
 static CP_Image heartPickupImg = NULL;
 
 /* Mystery box + roulette. */
-static Animation boxAnim;               /* the box in the lane */
+static CP_Image boxImg = NULL;               /* the box in the lane */
 static float rouletteTimer = 0.0f;      /* > 0 while the icons are spinning */
 static float rouletteSwitch = 0.0f;     /* time until the icon changes */
 static int rouletteShown = 0;           /* icon currently shown in the slot */
@@ -450,9 +455,9 @@ static Animation obsAnim[NUM_OBS_TYPES];
 
 static const char* obsPaths[NUM_OBS_TYPES] =
 {
-    "../Assets/pixil-layer-barrier.png",
-    "../Assets/pixil-layer-Oil Bubble (500).png",
-    "../Assets/pixil-layer-hole.png"
+    "../Assets/barrier.png",
+    "../Assets/Oil Bubble.png",
+    "../Assets/hole.png"
 };
 
 // obstacle animation data (shared sprite sheet, one frame counter per obstacle). 
@@ -466,10 +471,10 @@ typedef struct
 } FxSheetInfo;
 
 /* Edit path / frame count / frame size / speed when the art is ready. */
-static const FxSheetInfo oilSpawnInfo = { "../Assets/pixil-layer-Oil Bubble (500).png",      4, 500.0f, 500.0f, 0.08f };
-static const FxSheetInfo barrierBreakInfo = { "../Assets/pixil-layer-Barrier Break (500).png",  4, 500.0f, 500.0f, 0.07f };
-static const FxSheetInfo holeDeathInfo = { "../Assets/pixil-layer-Hole Fall (500).png", 5, 500.0f, 500.0f, 0.10f };
-static const FxSheetInfo oilDeathInfo = { "../Assets/pixil-layer-Pin Fall (500).png",  4, 500.0f, 500.0f, 0.10f };
+static const FxSheetInfo oilSpawnInfo = { "../Assets/Oil Bubble.png",      4, 500.0f, 500.0f, 0.08f };
+static const FxSheetInfo barrierBreakInfo = { "../Assets/Barrier Break.png",  4, 500.0f, 500.0f, 0.07f };
+static const FxSheetInfo holeDeathInfo = { "../Assets/Hole Fall.png", 5, 500.0f, 500.0f, 0.10f };
+static const FxSheetInfo oilDeathInfo = { "../Assets/Pin Fall.png",  4, 500.0f, 500.0f, 0.10f };
 
 /* The oil spawn animation starts once the whole spill is on screen
    (fraction of the screen width; 1.0 = as soon as it is fully visible). */
@@ -721,7 +726,7 @@ void StartRun(void)
 
     score = 0.0f;
     distance = 0;
-    distanceTimer = 0.0f;
+    distanceMetres = 0.0f;
     highScoreAtStart = highScore;
     deathHoldTimer = 0.0f;
 
@@ -820,8 +825,8 @@ static const SheetInfo puIconInfo[NUM_POWERUPS] =
 static const SheetInfo puFxInfo[NUM_POWERUPS] =
 {
     { "../Assets/invincible_anim.png", 4, 384.0f, 426.0f, 0.15f },
-    { "../Assets/pixil-layer-Pin Shield (500).png",     4, 500.0f, 500.0f, 0.10f },
-    { "../Assets/pixil-layer-Magnet-animation.png", 4, 120.0f, 120.0f, 0.15f }
+    { "../Assets/Pin Shield.png",     4, 500.0f, 500.0f, 0.10f },
+    { "../Assets/Magnet-animation.png", 4, 120.0f, 120.0f, 0.15f }
 };
 
 static const char* puLabels[NUM_POWERUPS] = { "I", "S", "M" };
@@ -902,6 +907,7 @@ static void StartRoulette(int type)
 {
     rouletteType = type;
     rouletteTimer = ROULETTE_TIME;
+    CP_Sound_PlayAdvanced(sndRouletteSpin, 1.0f, 1.0f, false, CP_SOUND_GROUP_SFX);
     rouletteSwitch = 0.0f;
     rouletteShown = CP_Random_RangeInt(0, NUM_POWERUPS - 1);
     revealTimer = 0.0f;
@@ -1250,9 +1256,10 @@ static void Draw_Pickups(void)
         float y = PlayerCenterY(pu_lane);
 
         /* the real power-up stays hidden: every pickup looks like the same box */
-        if (boxAnim.sheet != NULL)
+        if (boxImg != NULL)
         {
-            Anim_Draw(&boxAnim, pu_x, y);
+            float boxSize = PU_SIZE * gameScale;
+            CP_Image_Draw(boxImg, pu_x, y, boxSize, boxSize, 255);
         }
         else
         {
@@ -2054,8 +2061,8 @@ void Game_Init(void)
     heart_full = CP_Image_Load("../Assets/hearts.png");
 
     hudCoinImage = CP_Image_Load("../Assets/Coin_solo.png");
-    multiplierItemImg = CP_Image_Load("../Assets/pixil-layer-multiplier-ball-item.png");
-    if (multiplierItemImg == NULL) multiplierItemImg = CP_Image_Load("Assets/pixil-layer-multiplier-ball-item.png");
+    multiplierItemImg = CP_Image_Load("../Assets/multiplier-ball-item.png");
+    if (multiplierItemImg == NULL) multiplierItemImg = CP_Image_Load("Assets/multiplier-ball-item.png");
 
     if (hudCoinImage == NULL)
     {
@@ -2063,11 +2070,11 @@ void Game_Init(void)
     }
 
     // [ADDED BY LEKKAR] Load heart pickup image
-    heartPickupImg = CP_Image_Load("../Assets/pixil-layer-ExtraLife-item.png");
+    heartPickupImg = CP_Image_Load("../Assets/ExtraLife-item.png");
     if (heartPickupImg == NULL)
-        heartPickupImg = CP_Image_Load("Assets/pixil-layer-ExtraLife-item.png");
+        heartPickupImg = CP_Image_Load("Assets/ExtraLife-item.png");
     if (heartPickupImg == NULL)
-        heartPickupImg = CP_Image_Load("./Assets/pixil-layer-ExtraLife-item.png");
+        heartPickupImg = CP_Image_Load("./Assets/ExtraLife-item.png");
 
     // [ADDED BY GWEN] rage words font: try the relative path first, then the local path if that fails.
     rageFont = CP_Font_Load("../Assets/VT323-Regular.ttf");
@@ -2090,6 +2097,9 @@ void Game_Init(void)
     sndDeath = CP_Sound_Load("../Assets/game_over.mp3");
     gameMusic = CP_Sound_Load("../Assets/bg_music.mp3");
     sndHit = CP_Sound_Load("../Assets/edr-video-game-hit-noise-001-135821.mp3");
+    sndRouletteSpin = CP_Sound_Load("../Assets/roulette_spin.wav");
+    sndRouletteReveal = CP_Sound_Load("../Assets/roulette_reveal.wav");
+    sndMultiplier = CP_Sound_Load("../Assets/multiplier_sound.mp3");
 
     // [ADDED BY LEKKAR] Load heart pickup sound
     sndHeart = CP_Sound_Load("../Assets/heart_sound.mp3");
@@ -2212,7 +2222,7 @@ void Game_Init(void)
     // Revive extra-life angel pin animation: load once.
     Anim_Init(
         &reviveAnim,
-        "../Assets/pixil-layer-ExtraLife-animation.png",
+        "../Assets/ExtraLife-animation.png",
         4,
         120.0f,
         120.0f,
@@ -2223,7 +2233,7 @@ void Game_Init(void)
     if (reviveAnim.sheet == NULL)
     {
         reviveAnim.sheet = CP_Image_Load(
-            "Assets/pixil-layer-ExtraLife-animation.png"
+            "Assets/ExtraLife-animation.png"
         );
     }
 
@@ -2245,21 +2255,8 @@ void Game_Init(void)
     );;
 
     // Mystery box shown in the lane before the power-up is picked up.
-    Anim_Init(
-        &boxAnim,
-        "../Assets/mystery_box.png",
-        BOX_FRAMES,
-        BOX_W,
-        BOX_H,
-        BOX_TIME,
-        1
-    );
-
-    Anim_SetDrawSize(
-        &boxAnim,
-        PU_SIZE * gameScale * (BOX_W / BOX_H),
-        PU_SIZE * gameScale
-    );
+    boxImg = CP_Image_Load("../Assets/mysterybox-item.png");
+    if (boxImg == NULL) boxImg = CP_Image_Load("Assets/mysterybox-item.png");
 
     /* Scale initial spacing along with the obstacle sizes. */
     for (int i = 0; i < MAX_OBS; i++)
@@ -3148,13 +3145,8 @@ void Game_Update(void)
             highScore = currentScore;
         }
 
-        distanceTimer += dt;
-
-        if (distanceTimer >= 1.0f)
-        {
-            distanceTimer -= 1.0f;
-            distance++;
-        }
+        distanceMetres += speed * dt / DISTANCE_DIVISOR;
+        distance = (int)distanceMetres;
 
         /* Gradually increase gameplay speed. */
         speed += SPEED_RAMP * dt;
@@ -3225,7 +3217,7 @@ void Game_Update(void)
                 reviveAnimTimer -= dt;
 
             Anim_Update(&coinAnim);
-            Anim_Update(&boxAnim);
+            
 
             /* Item roulette: icons spin, slow down, then land on the real power-up. */
             if (rouletteTimer > 0.0f)
@@ -3239,6 +3231,7 @@ void Game_Update(void)
                     rouletteShown = rouletteType;
                     ApplyPowerUp(rouletteType);
                     revealTimer = REVEAL_TIME;
+                    CP_Sound_PlayAdvanced(sndRouletteReveal, 1.0f, 1.0f, false, CP_SOUND_GROUP_SFX);
                 }
                 else if (rouletteSwitch <= 0.0f)
                 {
@@ -3421,6 +3414,7 @@ void Game_Update(void)
                     {
                         scoreMultiplier++;
                     }
+                    CP_Sound_PlayAdvanced(sndMultiplier, 0.6f, 1.0f, false, CP_SOUND_GROUP_SFX);
                 }
                 else if (multiplier_x < -50.0f * gameScale)
                 {
@@ -3651,10 +3645,10 @@ void Game_Exit(void)
         coinAnim.sheet = NULL;
     }
 
-    if (boxAnim.sheet != NULL)
+    if (boxImg != NULL)
     {
-        CP_Image_Free(boxAnim.sheet);
-        boxAnim.sheet = NULL;
+        CP_Image_Free(boxImg);
+        boxImg = NULL;
     }
 
     for (int t = 0; t < NUM_POWERUPS; t++)
