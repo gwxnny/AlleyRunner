@@ -6,15 +6,15 @@
 @project    : Team Project 1 - Alley Runner
 @brief      : This file contains the implementation of the main menu state for the Alley Runner.
 *//*________________________________________________________________________________*/
-#ifndef WIN32_LEAN_AND_MEAN
+#ifndef WIN32_LEAN_AND_MEAN // prevents windows.h from including unnecessary headers, which can cause conflicts with other libraries.
 #define WIN32_LEAN_AND_MEAN
 #endif
 
-#ifndef NOMINMAX
+#ifndef NOMINMAX // prevents windows.h from defining min and max macros, which can conflict with std::min and std::max.
 #define NOMINMAX
 #endif
 
-#include <Windows.h>
+#include <Windows.h> // for monitor information, window styles and native window positioning.
 
 #include "mainmenu.h"
 #include "game.h"
@@ -24,22 +24,22 @@
 #include <stdbool.h>
 #include <math.h>
 
-CP_Font Font;
+CP_Font Font; // (not in used)
 
 // sounds
-static CP_Sound menuMusic = NULL;
-static CP_Sound buttonSound = NULL;
+static CP_Sound menuMusic = NULL; // background music for the main menu, start empty, then load in Init then free in Exit.
+static CP_Sound buttonSound = NULL; // sound effect for button clicks.
 
 // prevent the sound from being cut off by a state change.
 #define BUTTON_SOUND_DELAY 0.25f
 
-static float buttonActionTimer = 0.0f;
+static float buttonActionTimer = 0.0f; // timer to delay the button action after a click, to allow the sound to play before changing states.
 static int pendingButtonAction = 0; // 0 = none, 1 = play, 2 = exit
 
 // audio settings are initialized once when the main menu is first loaded.
 static bool audioSettingsInitialized = false;
-static float musicVolume = 0.2f;
-static float sfxVolume = 1.0f;
+static float musicVolume = 0.2f; // default music volume (0.0 to 1.0)
+static float sfxVolume = 1.0f; // default sound effects volume (0.0 to 1.0)
 
 // 0 = not dragging, 1 = music, 2 = SFX.
 static int activeVolumeSlider = 0;
@@ -77,26 +77,25 @@ static int menuBallFrame = 0;
 #define MENU_CHASE_GAP 500.0f // original: 230
 
 // sprite sheet frame sizes and counts for the pin and ball.
-// pin sheet: 480 x 120, containing 4 frames.
+// source sprite-sheet frames: each frame is 500 x 500 pixels.
 #define MENU_PIN_FRAME_COUNT 4
-#define MENU_PIN_FRAME_W 120.0f
-#define MENU_PIN_FRAME_H 120.0f
-// ball sheet: 2000 x 250, containing 8 frames.
+#define MENU_PIN_FRAME_W 500.0f
+#define MENU_PIN_FRAME_H 500.0f
+
 #define MENU_BALL_FRAME_COUNT 8
-#define MENU_BALL_FRAME_W 250.0f
-#define MENU_BALL_FRAME_H 250.0f
+#define MENU_BALL_FRAME_W 500.0f
+#define MENU_BALL_FRAME_H 500.0f
 
 // smaller frame times make the animation faster. Adjust these values to change the speed of the pin and ball animations.
 #define MENU_PIN_FRAME_TIME 0.10f
 #define MENU_BALL_FRAME_TIME 0.08f
 
 // display frame size
-#define MENU_PIN_SIZE 240.0f // original: 120
-#define MENU_BALL_SIZE 750.0f // original: 250
+#define MENU_PIN_SIZE 120.0f
+#define MENU_BALL_SIZE 500.0f
 
 // menu states.
 static GameState currentRequestedState = STATE_MAIN_MENU;
-
 static Button btnPlay;
 static Button btnHowTo;
 static Button btnOptions;
@@ -107,11 +106,78 @@ static bool showOptionsModal = false;
 
 static float floatTimer = 0.0f;
 
+// display mode options for windowed, borderless, and fullscreen.
+typedef enum
+{
+    DISPLAY_WINDOWED,
+    DISPLAY_BORDERLESS,
+    DISPLAY_FULLSCREEN
+} DisplayMode;
+
+static DisplayMode displayMode = DISPLAY_WINDOWED;
+
+// store the last windowed size to restore it when switching back from fullscreen or borderless.
+static int windowedWidth = 1280;
+static int windowedHeight = 720;
+
+static bool displaySettingsInitialized = false;
+
 /* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
     Button helpers
 
 */ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
+
+/*! Specification for function IsMouseOverButton:
+@brief Checks whether the mouse is inside a button.
+
+@param btn - The button to check.
+@param mouseX - The mouse's horizontal position.
+@param mouseY - The mouse's vertical position.
+@return true - If the mouse is inside the button, otherwise false.
+*//*________________________________________________________________________________*/
+// UI FIX: proportional scaling from the 1280 x 720 design canvas.
+static float MenuUIScale(void)
+{
+    return fminf((float)CP_System_GetWindowWidth() / 1280.0f,
+        (float)CP_System_GetWindowHeight() / 720.0f);
+}
+
+static float MenuContentScale(void)
+{
+    float scale = MenuUIScale();
+
+    if (displayMode == DISPLAY_WINDOWED)
+    {
+        scale *= 0.72f;
+    }
+
+    return scale;
+}
+
+// UI FIX: map the native client-area mouse position to drawing coordinates.
+static void GetUIMouse(float* x, float* y)
+{
+    HWND window = CP_System_GetWindowHandle();
+    POINT cursor;
+    RECT client;
+
+    *x = CP_Input_GetMouseX();
+    *y = CP_Input_GetMouseY();
+
+    if (window != NULL && GetCursorPos(&cursor) &&
+        ScreenToClient(window, &cursor) && GetClientRect(window, &client))
+    {
+        int clientW = client.right - client.left;
+        int clientH = client.bottom - client.top;
+
+        if (clientW > 0 && clientH > 0)
+        {
+            *x = (float)cursor.x * (float)CP_System_GetWindowWidth() / (float)clientW;
+            *y = (float)cursor.y * (float)CP_System_GetWindowHeight() / (float)clientH;
+        }
+    }
+}
 
 static bool IsMouseOverButton(
     Button btn,
@@ -128,6 +194,14 @@ static bool IsMouseOverButton(
         mouseY <= btn.y + halfHeight;
 }
 
+/*! Specification for function PlayMenuClick:
+@brief Plays the menu button click sound.
+
+The sound only plays if it has been loaded.
+
+@param none.
+@return none.
+*//*________________________________________________________________________________*/
 static void PlayMenuClick(void)
 {
     if (buttonSound != NULL) {
@@ -135,11 +209,19 @@ static void PlayMenuClick(void)
     }
 }
 
+/*! Specification for function DrawPillButton:
+@brief Draws a rounded menu button and its label.
+
+The button changes colour when the mouse is over it (hovered).
+
+@param btn - The button to draw.
+@return none.
+*//*________________________________________________________________________________*/
 static void DrawPillButton(Button btn)
 {
     CP_Settings_RectMode(CP_POSITION_CENTER);
     CP_Settings_Stroke(CP_Color_Create(20, 20, 20, 255));
-    CP_Settings_StrokeWeight(5.0f);
+    CP_Settings_StrokeWeight(5.0f * MenuUIScale());
 
     if (btn.isHovered) {
         CP_Settings_Fill(CP_Color_Create(225, 75, 95, 255));
@@ -169,7 +251,7 @@ static void DrawPillButton(Button btn)
         btn.height * 0.18f
     );
 
-	// button label.
+    // button label.
     CP_Settings_TextAlignment(
         CP_TEXT_ALIGN_H_CENTER,
         CP_TEXT_ALIGN_V_MIDDLE
@@ -177,10 +259,10 @@ static void DrawPillButton(Button btn)
 
     if (fontTitle != NULL) {
         CP_Font_Set(fontTitle);
-        CP_Settings_TextSize(20.0f);
+        CP_Settings_TextSize(btn.height * 0.30f);
     }
     else {
-        CP_Settings_TextSize(22.0f);
+        CP_Settings_TextSize(btn.height * 0.34f);
     }
 
     if (btn.isHovered) {
@@ -200,6 +282,20 @@ static void DrawPillButton(Button btn)
 
 */ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
+/*! Specification for function DrawTextWithOutline:
+@brief Draws text with an outline around it.
+
+The outline is made by drawing copies of the text around its position.
+
+@param text - The text to draw.
+@param x - The horizontal position of the text.
+@param y - The vertical position of the text.
+@param size - The text size.
+@param fillColor - The colour of the main text.
+@param strokeColor - The colour of the outline.
+@param outlineWidth - The distance between the text and its outline copies.
+@return none.
+*//*________________________________________________________________________________*/
 static void DrawTextWithOutline(
     const char* text,
     float x,
@@ -238,15 +334,25 @@ static void DrawTextWithOutline(
 
 */ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
+/*! Specification for function UpdateMenuButtonLayout:
+@brief Sets the positions and sizes of the main menu buttons.
+
+The buttons are arranged vertically in the centre of the window.
+
+@param windowW - The window width.
+@param windowH - The window height.
+@return none.
+*//*________________________________________________________________________________*/
 static void UpdateMenuButtonLayout(float windowW, float windowH)
 {
     float centerX = windowW / 2.0f;
     float startY = windowH * 0.48f;
 
-	// change values to resize the menu buttons.
-    float btnWidth = 270.0f;
-    float btnHeight = 58.0f;
-    float spacing = 72.0f;
+    // change values to resize the menu buttons.
+    float contentScale = MenuContentScale();
+    float btnWidth = 320.0f * contentScale;
+    float btnHeight = 64.0f * contentScale;
+    float spacing = 78.0f * contentScale;
 
     btnPlay = (Button){
         centerX,
@@ -288,10 +394,16 @@ static void UpdateMenuButtonLayout(float windowW, float windowH)
 
 /* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
-	Audio options
+    Audio options
 
 */ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
+/*! Specification for function ApplyAudioVolumes:
+@brief Applies the current music and sound effect volume settings.
+
+@param none.
+@return none.
+*//*________________________________________________________________________________*/
 static void ApplyAudioVolumes(void)
 {
     CP_Sound_SetGroupVolume(
@@ -305,6 +417,18 @@ static void ApplyAudioVolumes(void)
     );
 }
 
+/*! Specification for function DrawVolumeSlider:
+@brief Draws a volume slider with a label and percentage.
+
+This function only draws the slider. It does not handle mouse input.
+
+@param label - The name displayed above the slider.
+@param left - The horizontal position of the slider's left edge.
+@param y - The vertical position of the slider.
+@param width - The width of the slider.
+@param value - The volume level, from 0.0 to 1.0.
+@return none.
+*//*________________________________________________________________________________*/
 static void DrawVolumeSlider(
     const char* label,
     float left,
@@ -312,6 +436,7 @@ static void DrawVolumeSlider(
     float width,
     float value)
 {
+    float uiScale = MenuContentScale();
     char text[80];
 
     snprintf(
@@ -322,27 +447,27 @@ static void DrawVolumeSlider(
         (int)(value * 100.0f + 0.5f)
     );
 
-	// slider label and percentage.
+    // slider label and percentage.
     CP_Settings_NoStroke();
     CP_Settings_TextAlignment(
         CP_TEXT_ALIGN_H_LEFT,
         CP_TEXT_ALIGN_V_MIDDLE
     );
-    CP_Settings_TextSize(28.0f);
+    CP_Settings_TextSize((28.0f * uiScale));
     CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
-    CP_Font_DrawText(text, left, y - 32.0f);
+    CP_Font_DrawText(text, left, y - (32.0f * uiScale));
     CP_Settings_RectMode(CP_POSITION_CENTER);
     CP_Settings_Fill(CP_Color_Create(75, 75, 85, 255));
     CP_Graphics_DrawRectAdvanced(
         left + width / 2.0f,
         y,
         width,
-        12.0f,
+        (12.0f * uiScale),
         0.0f,
-        6.0f
+        (6.0f * uiScale)
     );
 
-	// filled portion of the slider.
+    // filled portion of the slider.
     if (value > 0.0f) {
         CP_Settings_Fill(CP_Color_Create(225, 75, 95, 255));
 
@@ -350,39 +475,29 @@ static void DrawVolumeSlider(
             left + width * value / 2.0f,
             y,
             width * value,
-            12.0f
+            (12.0f * uiScale)
         );
     }
 
-	// slider knob.
+    // slider knob.
     CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
 
     CP_Graphics_DrawRectAdvanced(
         left + width * value,
         y,
-        18.0f,
-        30.0f,
+        (18.0f * uiScale),
+        (30.0f * uiScale),
         0.0f,
-        7.0f
+        (7.0f * uiScale)
     );
 }
 
-/* Display settings persist between menu visits in the same run. */
-typedef enum
-{
-    DISPLAY_WINDOWED,
-    DISPLAY_BORDERLESS,
-    DISPLAY_FULLSCREEN
-} DisplayMode;
+/*! Specification for function GetDisplayModeLabel:
+@brief Gets the text label for the current display mode.
 
-static DisplayMode displayMode = DISPLAY_WINDOWED;
-
-/* Size used when returning to bordered windowed mode. */
-static int windowedWidth = 1280;
-static int windowedHeight = 720;
-
-static bool displaySettingsInitialized = false;
-
+@param none.
+@return The name of the current display mode.
+*//*________________________________________________________________________________*/
 static const char* GetDisplayModeLabel(void)
 {
     switch (displayMode)
@@ -398,6 +513,15 @@ static const char* GetDisplayModeLabel(void)
     }
 }
 
+/*! Specification for function ApplyDisplayMode:
+@brief Changes the window to the selected display mode.
+
+Supports windowed, borderless windowed, and fullscreen modes.
+Remembers the windowed size before leaving windowed mode.
+
+@param nextMode - The display mode to switch to.
+@return none.
+*//*________________________________________________________________________________*/
 static void ApplyDisplayMode(DisplayMode nextMode)
 {
     HWND window = CP_System_GetWindowHandle();
@@ -422,10 +546,10 @@ static void ApplyDisplayMode(DisplayMode nextMode)
         return;
     }
 
-	// request windowed mode to ensure the window is not in fullscreen before changing the native frame.
+    // request windowed mode to ensure the window is not in fullscreen before changing the native frame.
     CP_System_SetWindowSize(windowedWidth, windowedHeight);
 
-	// retrieve the native window handle and monitor information to adjust the window style and position for borderless or windowed mode.
+    // retrieve the native window handle and monitor information to adjust the window style and position for borderless or windowed mode.
     window = CP_System_GetWindowHandle();
 
     if (window == NULL)
@@ -491,7 +615,7 @@ static void ApplyDisplayMode(DisplayMode nextMode)
 
         SetWindowLongPtr(window, GWL_STYLE, style);
 
-		// calculate the outer window size needed for the requested client area.
+        // calculate the outer window size needed for the requested client area.
         RECT rect = {
             0,
             0,
@@ -549,26 +673,39 @@ static void ApplyDisplayMode(DisplayMode nextMode)
     displayMode = nextMode;
 }
 
+/*! Specification for function DrawOptionsModal:
+@brief Draws the options popup and handles its controls.
+
+Allows the player to change the display mode, adjust audio volumes,
+and close the popup using the Back button or Escape key.
+
+@param centerX - The horizontal centre of the popup.
+@param centerY - The vertical centre of the popup.
+@param windowW - The window width.
+@param windowH - The window height.
+@return none.
+*//*________________________________________________________________________________*/
 static void DrawOptionsModal(
     float centerX,
     float centerY,
     float windowW,
     float windowH)
 {
-    float mouseX = CP_Input_GetMouseX();
-    float mouseY = CP_Input_GetMouseY();
+    float uiScale = MenuUIScale();
+    float mouseX, mouseY;
+    GetUIMouse(&mouseX, &mouseY);
 
-    float sliderWidth = 400.0f;
+    float sliderWidth = (400.0f * uiScale);
     float sliderLeft = centerX - sliderWidth / 2.0f;
 
-    float musicY = centerY - 10.0f;
-    float sfxY = centerY + 85.0f;
+    float musicY = centerY - (10.0f * uiScale);
+    float sfxY = centerY + (85.0f * uiScale);
 
     Button backButton = {
         centerX,
-        centerY + 190.0f,
-        230.0f,
-        52.0f,
+        centerY + (190.0f * uiScale),
+        (230.0f * uiScale),
+        (52.0f * uiScale),
         "BACK",
         false
     };
@@ -576,24 +713,24 @@ static void DrawOptionsModal(
     backButton.isHovered =
         IsMouseOverButton(backButton, mouseX, mouseY);
 
-	// handle mouse input for the volume sliders.
+    // handle mouse input for the volume sliders.
     if (CP_Input_MouseTriggered(MOUSE_BUTTON_LEFT)) {
         bool insideSliderWidth =
-            mouseX >= sliderLeft - 12.0f &&
-            mouseX <= sliderLeft + sliderWidth + 12.0f;
+            mouseX >= sliderLeft - (12.0f * uiScale) &&
+            mouseX <= sliderLeft + sliderWidth + (12.0f * uiScale);
 
         if (insideSliderWidth &&
-            fabsf(mouseY - musicY) <= 22.0f) {
+            fabsf(mouseY - musicY) <= (22.0f * uiScale)) {
             activeVolumeSlider = 1;
         }
         else if (
             insideSliderWidth &&
-            fabsf(mouseY - sfxY) <= 22.0f) {
+            fabsf(mouseY - sfxY) <= (22.0f * uiScale)) {
             activeVolumeSlider = 2;
         }
     }
 
-	// update slider values if the mouse is being dragged.
+    // update slider values if the mouse is being dragged.
     if (CP_Input_MouseDown(MOUSE_BUTTON_LEFT)) {
         if (activeVolumeSlider != 0) {
             float value = ClampFloat(
@@ -613,7 +750,7 @@ static void DrawOptionsModal(
         }
     }
     else if (activeVolumeSlider != 0) {
-		// mouse button released, play a click sound if the user was dragging a slider.
+        // mouse button released, play a click sound if the user was dragging a slider.
         if (activeVolumeSlider == 2) {
             PlayMenuClick();
         }
@@ -621,7 +758,7 @@ static void DrawOptionsModal(
         activeVolumeSlider = 0;
     }
 
-	// dim screen behind the popup.
+    // dim screen behind the popup.
     CP_Settings_RectMode(CP_POSITION_CENTER);
     CP_Settings_NoStroke();
     CP_Settings_Fill(CP_Color_Create(0, 0, 0, 150));
@@ -633,21 +770,21 @@ static void DrawOptionsModal(
         windowH
     );
 
-	// popup panel.
+    // popup panel.
     CP_Settings_Fill(CP_Color_Create(20, 20, 25, 250));
     CP_Settings_Stroke(CP_Color_Create(225, 75, 95, 255));
-    CP_Settings_StrokeWeight(4.0f);
+    CP_Settings_StrokeWeight((4.0f * uiScale));
 
     CP_Graphics_DrawRectAdvanced(
         centerX,
         centerY,
-        580.0f,
-        520.0f,
+        (580.0f * uiScale),
+        (520.0f * uiScale),
         0.0f,
-        15.0f
+        (15.0f * uiScale)
     );
 
-	// header text.
+    // header text.
     CP_Settings_NoStroke();
     CP_Settings_TextAlignment(
         CP_TEXT_ALIGN_H_CENTER,
@@ -658,16 +795,16 @@ static void DrawOptionsModal(
         CP_Font_Set(fontTitle);
     }
 
-    CP_Settings_TextSize(22.0f);
+    CP_Settings_TextSize((22.0f * uiScale));
     CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
 
     CP_Font_DrawText(
         "OPTIONS",
         centerX,
-        centerY - 210.0f
+        centerY - (210.0f * uiScale)
     );
 
-	// display mode button.
+    // display mode button.
     if (fontBody != NULL)
     {
         CP_Font_Set(fontBody);
@@ -678,20 +815,20 @@ static void DrawOptionsModal(
         CP_TEXT_ALIGN_V_MIDDLE
     );
 
-    CP_Settings_TextSize(26.0f);
+    CP_Settings_TextSize((26.0f * uiScale));
     CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
 
     CP_Font_DrawText(
         "Display mode - click to change",
         centerX,
-        centerY - 165.0f
+        centerY - (165.0f * uiScale)
     );
 
     Button displayButton = {
         centerX,
-        centerY - 120.0f,
-        460.0f,
-        52.0f,
+        centerY - (120.0f * uiScale),
+        (460.0f * uiScale),
+        (52.0f * uiScale),
         GetDisplayModeLabel(),
         false
     };
@@ -712,7 +849,7 @@ static void DrawOptionsModal(
         activeVolumeSlider = 0;
         ApplyDisplayMode(nextMode);
 
-		// stop drawing the options modal and return to the main menu.
+        // stop drawing the options modal and return to the main menu.
         return;
     }
 
@@ -739,7 +876,7 @@ static void DrawOptionsModal(
 
     DrawPillButton(backButton);
 
-	// close popup if the user clicks the back button or presses ESC.
+    // close popup if the user clicks the back button or presses ESC.
     if (
         (CP_Input_MouseTriggered(MOUSE_BUTTON_LEFT) &&
             backButton.isHovered) ||
@@ -754,21 +891,60 @@ static void DrawOptionsModal(
 
 /* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
-	How to play 
+    How to play
 
 */ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
+/*! Specification for function DrawHowToModal:
+@brief Draws the How to Play popup.
+
+Shows the game instructions and closes the popup when the player
+clicks anywhere or presses Escape.
+
+@param centerX - The horizontal centre of the popup.
+@param centerY - The vertical centre of the background overlay.
+@param windowW - The window width.
+@param windowH - The window height.
+@return none.
+*//*________________________________________________________________________________*/
 static void DrawHowToModal(
     float centerX,
     float centerY,
     float windowW,
     float windowH)
 {
-    CP_Settings_RectMode(CP_POSITION_CENTER);
+    if (windowW <= 0.0f || windowH <= 0.0f) {
+        return;
+    }
 
-	// dim screen behind the popup.
+    // Scale the layout from a 1280 x 720 reference window.
+    float scaleX = windowW / 1280.0f;
+    float scaleY = windowH / 720.0f;
+    float scale = (scaleX < scaleY) ? scaleX : scaleY;
+
+    float panelW = 1120.0f * scale;
+    float panelH = 610.0f * scale;
+
+    float panelX = windowW * 0.5f;
+    float panelY = windowH * 0.5f;
+
+    float panelLeft = panelX - panelW * 0.5f;
+    float panelTop = panelY - panelH * 0.5f;
+
+    float leftX = panelLeft + 45.0f * scale;
+    float rightX = panelX + 35.0f * scale;
+
+    CP_Color white = CP_Color_Create(245, 245, 245, 255);
+    CP_Color muted = CP_Color_Create(195, 195, 205, 255);
+    CP_Color pink = CP_Color_Create(225, 75, 95, 255);
+    CP_Color gold = CP_Color_Create(255, 210, 80, 255);
+    CP_Color blue = CP_Color_Create(100, 195, 255, 255);
+    CP_Color purple = CP_Color_Create(195, 135, 255, 255);
+
+    // Dim the menu behind the popup.
+    CP_Settings_RectMode(CP_POSITION_CENTER);
     CP_Settings_NoStroke();
-    CP_Settings_Fill(CP_Color_Create(0, 0, 0, 150));
+    CP_Settings_Fill(CP_Color_Create(0, 0, 0, 190));
 
     CP_Graphics_DrawRect(
         centerX,
@@ -777,23 +953,23 @@ static void DrawHowToModal(
         windowH
     );
 
-	// popup panel.
-    float panelY = windowH * 0.55f;
-
+    // Main panel.
     CP_Settings_Fill(CP_Color_Create(20, 20, 25, 250));
-    CP_Settings_Stroke(CP_Color_Create(225, 75, 95, 255));
-    CP_Settings_StrokeWeight(4.0f);
+    CP_Settings_Stroke(pink);
+    CP_Settings_StrokeWeight(4.0f * scale);
 
     CP_Graphics_DrawRectAdvanced(
-        centerX,
+        panelX,
         panelY,
-        620.0f,
-        310.0f,
+        panelW,
+        panelH,
         0.0f,
-        15.0f
+        18.0f * scale
     );
 
     CP_Settings_NoStroke();
+
+    // Title.
     CP_Settings_TextAlignment(
         CP_TEXT_ALIGN_H_CENTER,
         CP_TEXT_ALIGN_V_MIDDLE
@@ -802,55 +978,233 @@ static void DrawHowToModal(
     if (fontTitle != NULL) {
         CP_Font_Set(fontTitle);
     }
+    else if (fontBody != NULL) {
+        CP_Font_Set(fontBody);
+    }
 
-    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
-    CP_Settings_TextSize(18.0f);
+    CP_Settings_Fill(white);
+    CP_Settings_TextSize(26.0f * scale);
 
     CP_Font_DrawText(
         "HOW TO PLAY",
-        centerX,
-        panelY - 110.0f
+        panelX,
+        panelTop + 45.0f * scale
     );
 
     if (fontBody != NULL) {
         CP_Font_Set(fontBody);
     }
 
-    CP_Settings_TextSize(26.0f);
+    CP_Settings_TextSize(26.0f * scale);
+    CP_Settings_Fill(muted);
 
     CP_Font_DrawText(
-        "- Use [W / S] to switch lanes",
-        centerX,
-        panelY - 55.0f
+        "Keep running. Don't get bowled over!",
+        panelX,
+        panelTop + 87.0f * scale
     );
 
+    // Horizontal and vertical dividers.
+    CP_Settings_Fill(CP_Color_Create(225, 75, 95, 110));
+
+    CP_Graphics_DrawRect(
+        panelX,
+        panelTop + 115.0f * scale,
+        panelW - 70.0f * scale,
+        2.0f * scale
+    );
+
+    CP_Graphics_DrawRect(
+        panelX,
+        panelTop + 303.0f * scale,
+        2.0f * scale,
+        335.0f * scale
+    );
+
+    CP_Settings_TextAlignment(
+        CP_TEXT_ALIGN_H_LEFT,
+        CP_TEXT_ALIGN_V_MIDDLE
+    );
+
+    // Left column: objective.
+    CP_Settings_TextSize(29.0f * scale);
+    CP_Settings_Fill(pink);
     CP_Font_DrawText(
-        "- Dodge oil slicks and fatal pit holes",
-        centerX,
-        panelY - 15.0f
+        "YOUR GOAL",
+        leftX,
+        panelTop + 148.0f * scale
     );
 
+    CP_Settings_TextSize(25.0f * scale);
+    CP_Settings_Fill(white);
     CP_Font_DrawText(
-        "- Collect multiplier stars & speed boosts",
-        centerX,
-        panelY + 25.0f
+        "Survive as long as possible.",
+        leftX,
+        panelTop + 183.0f * scale
     );
-
     CP_Font_DrawText(
-        "- Don't let the chasing bowling ball catch you!",
-        centerX,
-        panelY + 65.0f
+        "Collect coins to boost your score.",
+        leftX,
+        panelTop + 213.0f * scale
+    );
+    CP_Font_DrawText(
+        "The game gets faster over time!",
+        leftX,
+        panelTop + 243.0f * scale
     );
 
-    CP_Settings_Fill(CP_Color_Create(225, 75, 95, 255));
-    CP_Settings_TextSize(22.0f);
+    // Left column: controls.
+    CP_Settings_TextSize(29.0f * scale);
+    CP_Settings_Fill(pink);
+    CP_Font_DrawText(
+        "CONTROLS",
+        leftX,
+        panelTop + 290.0f * scale
+    );
 
+    CP_Settings_TextSize(25.0f * scale);
+    CP_Settings_Fill(white);
+    CP_Font_DrawText(
+        "W / S  -  Move up / down one lane",
+        leftX,
+        panelTop + 325.0f * scale
+    );
+    CP_Font_DrawText(
+        "SPACE  -  Pause / Resume",
+        leftX,
+        panelTop + 355.0f * scale
+    );
+
+    // Left column: health and hazards.
+    CP_Settings_TextSize(29.0f * scale);
+    CP_Settings_Fill(pink);
+    CP_Font_DrawText(
+        "HAZARDS & HEARTS",
+        leftX,
+        panelTop + 402.0f * scale
+    );
+
+    CP_Settings_TextSize(25.0f * scale);
+    CP_Settings_Fill(white);
+    CP_Font_DrawText(
+        "Avoid barriers, oil slicks, and holes.",
+        leftX,
+        panelTop + 437.0f * scale
+    );
+    CP_Font_DrawText(
+        "3 hearts. Each unprotected hit costs 1.",
+        leftX,
+        panelTop + 467.0f * scale
+    );
+    CP_Font_DrawText(
+        "Lose all hearts and the run ends.",
+        leftX,
+        panelTop + 497.0f * scale
+    );
+
+    // Right column: mystery boxes.
+    CP_Settings_TextSize(29.0f * scale);
+    CP_Settings_Fill(pink);
+    CP_Font_DrawText(
+        "MYSTERY BOXES",
+        rightX,
+        panelTop + 148.0f * scale
+    );
+
+    CP_Settings_TextSize(25.0f * scale);
+    CP_Settings_Fill(white);
+    CP_Font_DrawText(
+        "Collect a box and wait for the roll.",
+        rightX,
+        panelTop + 183.0f * scale
+    );
+    CP_Font_DrawText(
+        "Receive one random power-up:",
+        rightX,
+        panelTop + 213.0f * scale
+    );
+
+    // Right column: invincibility.
+    CP_Settings_TextSize(27.0f * scale);
+    CP_Settings_Fill(gold);
+    CP_Font_DrawText(
+        "INVINCIBILITY - 5 seconds",
+        rightX,
+        panelTop + 260.0f * scale
+    );
+
+    CP_Settings_TextSize(25.0f * scale);
+    CP_Settings_Fill(white);
+    CP_Font_DrawText(
+        "Blocks barrier and oil damage.",
+        rightX,
+        panelTop + 293.0f * scale
+    );
+
+    // Right column: shield.
+    CP_Settings_TextSize(27.0f * scale);
+    CP_Settings_Fill(blue);
+    CP_Font_DrawText(
+        "SHIELD - Up to 10 seconds",
+        rightX,
+        panelTop + 340.0f * scale
+    );
+
+    CP_Settings_TextSize(25.0f * scale);
+    CP_Settings_Fill(white);
+    CP_Font_DrawText(
+        "Blocks one barrier or oil hit.",
+        rightX,
+        panelTop + 373.0f * scale
+    );
+
+    // Right column: magnet.
+    CP_Settings_TextSize(27.0f * scale);
+    CP_Settings_Fill(purple);
+    CP_Font_DrawText(
+        "MAGNET - 8 seconds",
+        rightX,
+        panelTop + 420.0f * scale
+    );
+
+    CP_Settings_TextSize(25.0f * scale);
+    CP_Settings_Fill(white);
+    CP_Font_DrawText(
+        "Pulls nearby coins towards you.",
+        rightX,
+        panelTop + 453.0f * scale
+    );
+
+    CP_Settings_Fill(gold);
+    CP_Font_DrawText(
+        "Holes bypass shields & invincibility!",
+        rightX,
+        panelTop + 497.0f * scale
+    );
+
+    // Footer.
+    CP_Settings_TextAlignment(
+        CP_TEXT_ALIGN_H_CENTER,
+        CP_TEXT_ALIGN_V_MIDDLE
+    );
+
+    CP_Settings_TextSize(23.0f * scale);
+    CP_Settings_Fill(muted);
+    CP_Font_DrawText(
+        "Stay alert when moving text crosses the screen.",
+        panelX,
+        panelTop + 545.0f * scale
+    );
+
+    CP_Settings_TextSize(24.0f * scale);
+    CP_Settings_Fill(pink);
     CP_Font_DrawText(
         "[ Click anywhere or press ESC to return ]",
-        centerX,
-        panelY + 120.0f
+        panelX,
+        panelTop + 580.0f * scale
     );
 
+    // Close the popup.
     if (
         CP_Input_MouseTriggered(MOUSE_BUTTON_LEFT) ||
         CP_Input_KeyTriggered(KEY_ESCAPE)
@@ -858,10 +1212,22 @@ static void DrawHowToModal(
         PlayMenuClick();
         showHowToModal = false;
     }
+
+    CP_Settings_RectMode(CP_POSITION_CENTER);
+    CP_Settings_NoStroke();
 }
 
-// characters chasing each other across the bottom of the menu.
-// animate the sprite frames and move the chase across the menu.
+/*! Specification for function DrawMenuChase:
+@brief Updates and draws the menu's bowling pin and ball animation.
+
+Moves both characters across the screen and updates their animation
+frames. Restarts the chase after both characters leave the screen.
+
+@param dt - The time passed since the previous frame, in seconds.
+@param windowW - The window width.
+@param windowH - The window height.
+@return none.
+*//*________________________________________________________________________________*/
 static void DrawMenuChase(
     float dt,
     float windowW,
@@ -869,8 +1235,8 @@ static void DrawMenuChase(
 {
     float menuScale = windowH / 720.0f;
 
-    float pinSize = MENU_PIN_SIZE * menuScale;
-    float ballSize = MENU_BALL_SIZE * menuScale;
+    float pinSize = MENU_PIN_SIZE;
+    float ballSize = MENU_BALL_SIZE;
     float chaseGap = MENU_CHASE_GAP * menuScale;
 
     // pin animation.
@@ -884,7 +1250,7 @@ static void DrawMenuChase(
             (menuPinFrame + 1) % MENU_PIN_FRAME_COUNT;
     }
 
-	// ball animation.
+    // ball animation.
     menuBallFrameTimer += dt;
 
     while (menuBallFrameTimer >= MENU_BALL_FRAME_TIME)
@@ -902,7 +1268,7 @@ static void DrawMenuChase(
     float pinX = menuChaseX;
     float ballX = menuChaseX - chaseGap;
 
-	// restart the chase when both characters haveleft the screen.
+    // restart the chase when both characters haveleft the screen.
     if (ballX - ballSize / 2.0f > windowW)
     {
         menuChaseX = -pinSize / 2.0f;
@@ -912,7 +1278,7 @@ static void DrawMenuChase(
     }
 
     float groundY = windowH * 0.90f;
-    float ballYOffset = 190.0f * menuScale;
+    float ballYOffset = 0.0f;
     float pinYOffset = 0.0f;
 
     CP_Settings_ImageMode(CP_POSITION_CENTER);
@@ -958,10 +1324,19 @@ static void DrawMenuChase(
 
 /* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
-	Main menu state functions
+    Main menu state functions
 
 */ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
+/*! Specification for function Main_Menu_Init:
+@brief Prepares the main menu when it is entered.
+
+Loads sounds, fonts, and images. Starts the menu music, sets up the
+buttons, and resets the menu animations and popup states.
+
+@param none.
+@return none.
+*//*________________________________________________________________________________*/
 void Main_Menu_Init(void)
 {
     buttonActionTimer = 0.0f;
@@ -985,7 +1360,7 @@ void Main_Menu_Init(void)
         displaySettingsInitialized = true;
     }
 
-	// initialize audio settings only once when the main menu is first loaded.
+    // initialize audio settings only once when the main menu is first loaded.
     if (!audioSettingsInitialized) {
         musicVolume = 0.2f;
         sfxVolume = 1.0f;
@@ -994,7 +1369,7 @@ void Main_Menu_Init(void)
 
     ApplyAudioVolumes();
 
-	// button click sound effect.
+    // button click sound effect.
     buttonSound = CP_Sound_Load(
         "../Assets/main_menu_btn_sound.mp3"
     );
@@ -1064,21 +1439,36 @@ void Main_Menu_Init(void)
         (float)CP_System_GetWindowHeight()
     );
 
-	// chase animation resources.
+    // chase animation resources.
     menuPin = CP_Image_Load(
-        "../Assets/bowling_pin_running.png"
+        "Assets/running_pin_spiderman.PNG"
     );
 
+    // below are the codes to load the menu pin and ball images, with fallback paths if the initial load fails.
+    if (menuPin == NULL)
+    {
+        menuPin = CP_Image_Load(
+            "../Assets/running_pin_spiderman.PNG"
+        );
+    }
+
     menuBall = CP_Image_Load(
-        "../Assets/bowling_ball_chasing.png"
+        "Assets/venom_bowling_ball_chasing.png"
     );
+
+    if (menuBall == NULL)
+    {
+        menuBall = CP_Image_Load(
+            "../Assets/venom_bowling_ball_chasing.png"
+        );
+    }
 
     // restart movement.
     float menuScale =
-    (float)CP_System_GetWindowHeight() / 720.0f;
+        (float)CP_System_GetWindowHeight() / 720.0f;
 
-menuChaseX =
-    -(MENU_PIN_SIZE * menuScale) / 2.0f;
+    menuChaseX =
+        -(MENU_PIN_SIZE * menuScale) / 2.0f;
     menuChaseTimer = 0.0f;
 
     // restart both animations.
@@ -1101,12 +1491,24 @@ menuChaseX =
 
 /* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
-	Main menu update function
+    Main menu update function
 
 */ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
+/*! Specification for function Main_Menu_Update:
+@brief Updates and draws the main menu each frame.
+
+Handles button clicks, popups, animations, and delayed Play or Exit
+actions. Also draws the title, background, high score, and team name.
+
+@param none.
+@return none.
+*//*________________________________________________________________________________*/
 void Main_Menu_Update(void)
 {
+    CP_Settings_ResetMatrix();
+    CP_Settings_ImageMode(CP_POSITION_CENTER);
+    float uiScale = MenuUIScale();
     float dt = CP_System_GetDt();
 
     // complete a delayed Play or Exit action.
@@ -1135,10 +1537,10 @@ void Main_Menu_Update(void)
 
     // title animation.
     floatTimer += dt * 2.5f;
-    float floatOffset = sinf(floatTimer) * 8.0f;
+    float floatOffset = sinf(floatTimer) * 8.0f * uiScale;
 
-    float mouseX = CP_Input_GetMouseX();
-    float mouseY = CP_Input_GetMouseY();
+    float mouseX, mouseY;
+    GetUIMouse(&mouseX, &mouseY);
 
     float windowW = (float)CP_System_GetWindowWidth();
     float windowH = (float)CP_System_GetWindowHeight();
@@ -1171,64 +1573,77 @@ void Main_Menu_Update(void)
     // background chase, behind the title, buttons, and popups.
     DrawMenuChase(dt, windowW, windowH);
 
-    // game title.
+	// title and subtitle: draw with a shadow and outline for better visibility.
     CP_Settings_NoStroke();
+
     CP_Settings_TextAlignment(
         CP_TEXT_ALIGN_H_CENTER,
         CP_TEXT_ALIGN_V_MIDDLE
     );
 
-    if (fontTitle != NULL) {
+	// scale the title and subtitle based on the menu UI scale, with a smaller scale for windowed mode.
+    float headingScale = MenuUIScale() * 0.65f;
+
+    float titleSize = 90.0f * headingScale;
+    float subtitleSize = 40.0f * headingScale;
+
+    // use a separate, scaled floating offset for the heading.
+    float headingFloat = sinf(floatTimer) * 8.0f * headingScale;
+
+    float titleY = windowH * 0.20f + headingFloat;
+    float taglineY = titleY + 80.0f * headingScale;
+
+    // title.
+    if (fontTitle != NULL)
+    {
         CP_Font_Set(fontTitle);
     }
 
-    float titleY = windowH * 0.20f + floatOffset;
-
+    // shadow.
     DrawTextWithOutline(
         "ALLEY RUNNER",
-        centerX + 5.0f,
-        titleY + 7.0f,
-        90.0f,
+        centerX + 5.0f * headingScale,
+        titleY + 7.0f * headingScale,
+        titleSize,
         shadowColor,
         shadowColor,
-        4.0f
+        4.0f * headingScale
     );
 
+	// main title.
     DrawTextWithOutline(
         "ALLEY RUNNER",
         centerX,
         titleY,
-        90.0f,
+        titleSize,
         whiteFill,
         blackStroke,
-        4.0f
+        4.0f * headingScale
     );
 
-    // tagline.
-    if (fontBody != NULL) {
+    // subtitle.
+    if (fontBody != NULL)
+    {
         CP_Font_Set(fontBody);
     }
 
-    // adjust tagline's y level.
-    float taglineY = titleY + 80.0f;
-
-    CP_Settings_TextSize(40.0f);
+    CP_Settings_TextSize(subtitleSize);
     CP_Settings_Fill(CP_Color_Create(0, 0, 0, 230));
 
     CP_Font_DrawText(
         "Keep running. Don't get bowled over!",
-        centerX + 2.0f,
-        taglineY + 3.0f
+        centerX + 2.0f * headingScale,
+        taglineY + 3.0f * headingScale
     );
 
     DrawTextWithOutline(
         "Keep running. Don't get bowled over!",
         centerX,
         taglineY,
-        40.0f,
+        subtitleSize,
         whiteFill,
         blackStroke,
-        1.0f
+        1.0f * headingScale
     );
 
     // draw and handle normal buttons only when no popup is open.
@@ -1300,7 +1715,7 @@ void Main_Menu_Update(void)
         CP_Font_Set(fontBody);
     }
 
-	// scale the footer text and spacing based on the window size.
+    // scale the footer text and spacing based on the window size.
     float footerScale = fminf(
         windowW / 1280.0f,
         windowH / 720.0f
@@ -1318,7 +1733,7 @@ void Main_Menu_Update(void)
     CP_Settings_NoStroke();
     CP_Settings_TextSize(footerSize);
 
-	// high score text.
+    // high score text.
     char highScoreText[64];
 
     snprintf(
@@ -1352,7 +1767,7 @@ void Main_Menu_Update(void)
         outlineWidth
     );
 
-	// team name: bottom right.
+    // team name: bottom right.
     CP_Settings_TextAlignment(
         CP_TEXT_ALIGN_H_RIGHT,
         CP_TEXT_ALIGN_V_BOTTOM
@@ -1380,10 +1795,19 @@ void Main_Menu_Update(void)
 
 /* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
-	Cleanup
+    Cleanup
 
 */ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
+/*! Specification for function Main_Menu_Exit:
+@brief Cleans up the main menu when it is left.
+
+Stops the music, frees loaded sounds and images, clears font
+references, and resets pending button actions.
+
+@param none.
+@return none.
+*//*________________________________________________________________________________*/
 void Main_Menu_Exit(void)
 {
     CP_Sound_StopGroup(CP_SOUND_GROUP_MUSIC);
@@ -1424,21 +1848,38 @@ void Main_Menu_Exit(void)
 
 /* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
-	State management
+    State management
 
 */ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
+/*! Specification for function Main_Menu_GetNextState:
+@brief Gets the game state currently requested by the main menu.
+
+@param none.
+@return The currently requested game state.
+*//*________________________________________________________________________________*/
 GameState Main_Menu_GetNextState(void)
 {
     return currentRequestedState;
 }
 
+/*! Specification for function Main_Menu_SetState:
+@brief Sets the game state requested by the main menu.
+
+@param state - The game state to request.
+@return none.
+*//*________________________________________________________________________________*/
 void Main_Menu_SetState(GameState state)
 {
     currentRequestedState = state;
 }
 
-// returns true if the current display mode is fullscreen or borderless windowed.
+/*! Specification for function Main_Menu_IsFullscreenMode:
+@brief Checks whether the display is fullscreen or borderless windowed.
+
+@param none.
+@return 1 if fullscreen or borderless windowed, otherwise 0.
+*//*________________________________________________________________________________*/
 int Main_Menu_IsFullscreenMode(void)
 {
     return displayMode == DISPLAY_FULLSCREEN ||

@@ -1,12 +1,54 @@
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+
 #include "cprocessing.h"
 #include "game.h"
 #include "mainmenu.h"
 #include "utils.h"
+#include "telemetry.h"
 
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+
+/* UI FIX: map the native client-area mouse position to drawing coordinates. */
+static void GetUIMouse(float* x, float* y)
+{
+    HWND window = CP_System_GetWindowHandle();
+    POINT cursor;
+    RECT client;
+
+    *x = CP_Input_GetMouseX();
+    *y = CP_Input_GetMouseY();
+
+    if (window != NULL && GetCursorPos(&cursor) &&
+        ScreenToClient(window, &cursor) && GetClientRect(window, &client))
+    {
+        int clientW = client.right - client.left;
+        int clientH = client.bottom - client.top;
+
+        if (clientW > 0 && clientH > 0)
+        {
+            *x = (float)cursor.x * (float)CP_System_GetWindowWidth() / (float)clientW;
+            *y = (float)cursor.y * (float)CP_System_GetWindowHeight() / (float)clientH;
+        }
+    }
+}
+
+/* UI FIX: use the full centre-based rectangle, not a highlight strip. */
+static int GameMouseInButton(float x, float y, float w, float h)
+{
+    float mouseX, mouseY;
+    GetUIMouse(&mouseX, &mouseY);
+    return mouseX >= x - w * 0.5f && mouseX <= x + w * 0.5f &&
+        mouseY >= y - h * 0.5f && mouseY <= y + h * 0.5f;
+}
 
 /* ============================================================
    Gameplay audio
@@ -47,8 +89,8 @@ static float gameScale = 1.0f;
 #define PLAYER_W 120.0f
 #define PLAYER_H 120.0f
 
-#define ENEMY_W 350.0f
-#define ENEMY_H 350.0f
+#define ENEMY_W 500.0f
+#define ENEMY_H 500.0f
 #define BALL_Y_OFFSET 140.0f
 
 #define GRAB_W 1000.0f
@@ -57,7 +99,7 @@ static float gameScale = 1.0f;
 #define ENEMY_BODY_X 96.0f
 #define GRAB_REACH   130.0f
 
-#define ENEMY_WALK_SPEED 250.0f
+#define ENEMY_WALK_SPEED 650.0f
 
 #define START_SPEED 800.0f
 #define SPEED_RAMP  10.0f
@@ -73,24 +115,24 @@ static float gameScale = 1.0f;
 #define SHIELD_TIME     10.0f
 #define MAGNET_TIME     8.0f
 
-#define PU_SPAWN_MIN    8.0f    /* seconds between power-up pickups */
+#define PU_SPAWN_MIN    8.0f /* seconds between power-up pickups */
 #define PU_SPAWN_MAX    15.0f
 #define PU_SIZE         70.0f
 #define PU_PICKUP_DIST  60.0f
-#define PU_FX_SIZE      190.0f  /* height of the effect drawn on the pin */
+#define PU_FX_SIZE      190.0f /* height of the effect drawn on the pin */
 
-      /* Mystery box (what the pickup looks like in the lane) and the item roulette. */
+   /* Mystery box (what the pickup looks like in the lane) and the item roulette. */
 #define BOX_FRAMES      4
 #define BOX_W           64.0f
 #define BOX_H           64.0f
 #define BOX_TIME        0.12f
-#define ROULETTE_TIME   1.5f    /* seconds the icons spin after the box is picked up */
-#define REVEAL_TIME     0.8f    /* seconds the final power-up stays shown */
+#define ROULETTE_TIME   1.5f /* seconds the icons spin after the box is picked up */
+#define REVEAL_TIME     0.8f /* seconds the final power-up stays shown */
 
 #define MAX_COINS         15
-#define COIN_PER_SPAWN 3   /* each spawn drops 1 to 3 coins in one lane */
+#define COIN_PER_SPAWN    3 /* each spawn drops 1 to 3 coins in one lane */
 #define COIN_SPACING      90.0f
-#define COIN_SIZE         90.0f   /* drawn height */
+#define COIN_SIZE         90.0f /* drawn height */
 
 /* Coin sprite sheet: COIN_FRAMES frames side by side, each COIN_SRC_W x COIN_SRC_H. */
 #define COIN_FRAMES       7
@@ -114,37 +156,26 @@ static float gameScale = 1.0f;
 #define MAGNET_RANGE      450.0f
 #define MAGNET_PULL_SPEED 1400.0f
 
-
-///* Death-screen layout. */
-//#define BTN_W     300.0f
-//#define BTN_H     200.0f
-//#define RESTART_X 400.0f
-//#define EXIT_X    1200.0f
-//#define BTN_Y     400.0f
-
-
 /* Death animation*/
-#define DEATH_SCALE        0.38f   /* 110 / 374 */
-#define DEATH_PIN_SRC_X    695.0f   /* pin centre x in frame 0 */
-#define DEATH_PIN_SRC_FEET 468.0f   /* pin feet y in frame 0 */
+#define DEATH_SCALE        0.38f /* 110 / 374 */
+#define DEATH_PIN_SRC_X    695.0f /* pin centre x in frame 0 */
+#define DEATH_PIN_SRC_FEET 468.0f /* pin feet y in frame 0 */
 #define DEATH_FRAME_TIME   0.08f
 
 /* Death-screen layout. */
 #define WIN_W ((float)CP_System_GetWindowWidth())
 #define WIN_H ((float)CP_System_GetWindowHeight())
 #define window_center_x (WIN_W / 2.0f)
-#define BTN_W 360.0f
-#define BTN_H 80.0f
+#define BTN_W (360.0f * HUD_SCALE)
+#define BTN_H (80.0f * HUD_SCALE)
 #define BTN_Y     (WIN_H * 0.76f)
-#define RESTART_X (window_center_x - 230.0f)
-#define EXIT_X    (window_center_x + 230.0f)
+#define RESTART_X (window_center_x - 200.0f * HUD_SCALE)
+#define EXIT_X    (window_center_x + 200.0f * HUD_SCALE)
 
 // Death Screen
 CP_Font pixel_font;
 int font_loaded = 0;
 int show_death_screen = 0;
-//int total_coins = 2450;
-//int final_score = ;
 const char* death_title = "GAME OVER";
 
 // Health Bar (in heart shape :)
@@ -157,7 +188,7 @@ CP_Image heart_full;
 #define hearts_center_y 65.0f  // same height as pause button
 
 int lives = max_lives;
-int   obs_hit[MAX_OBS];
+int obs_hit[MAX_OBS];
 
 //Player Hits Obstacle Flick
 #define hurt_duration   1.2f    // total time of the hit effect (seconds)
@@ -170,36 +201,52 @@ int   obs_hit[MAX_OBS];
 float hurt_timer = 0.0f;
 CP_Sound sndHit;
 
+static float reviveAnimTimer = 0.0f;
+
 // Pause button (top right) and pause menu
-#define pause_button_size 64.0f
-#define pause_button_x    (WIN_W - 52.0f)
-#define pause_button_y    60.0f
+#define pause_button_size (60.0f * HUD_SCALE)
+#define pause_button_x    (WIN_W - 46.0f * HUD_SCALE)
+#define pause_button_y    (48.0f * HUD_SCALE)
 #define pause_resume_y    (WIN_H * 0.50f)
 #define pause_quit_y      (WIN_H * 0.65f)
-#define PAUSE_BTN_W       460.0f
+#define PAUSE_BTN_W       (460.0f * HUD_SCALE)
 
 int is_paused = 0;
+
+/* [ADDED BY LEKKAR] Heart pickup settings and sound */
+//Hearts Spawn
+#define HEART_SPAWN_MIN   5.0f   /* seconds between heart spawns */
+#define HEART_SPAWN_MAX   8.0f
+#define HEART_PICKUP_SIZE 60.0f   /* drawn size */
+#define HEART_PICKUP_DIST 60.0f   /* collect distance */
+#define HEART_FIRST_DELAY_MIN 3.0f   /* seconds after losing a heart */
+#define HEART_FIRST_DELAY_MAX 6.0f
+#define HEART_VOL 1.0f
+
+static CP_Sound sndHeart = NULL;
 
 /* ============================================================
    Rage overlay
    ============================================================ */
 
+// stored font for the rage overlay text, 
+// game_init() loads it once and keeps it in memory for the rest of the game.
 static CP_Font rageFont = NULL;
 
-#define RAGE_QUIET_MIN_MS 6000
-#define RAGE_QUIET_MAX_MS 22000
+#define RAGE_QUIET_MIN_MS 6000 // minimum wait: 6 seconds
+#define RAGE_QUIET_MAX_MS 22000 // maximum wait: 22 seconds
 
-#define RAGE_EVENT_DURATION 6.0f
-#define RAGE_DRAW_SIZE 64.0f
-#define RAGE_ROWS 20
-#define RAGE_PHRASES_PER_ROW 8
-#define RAGE_PHRASE_GAP 0.0f
+#define RAGE_EVENT_DURATION 6.0f // how long the overlay lasts (seconds)
+#define RAGE_DRAW_SIZE 64.0f // base size of the text (scaled up for larger windows)
+#define RAGE_ROWS 20 // number of rows of text to draw (the text is randomly chosen from the rageWords array)
+#define RAGE_PHRASES_PER_ROW 8 // number of phrases to draw in each row (the text is randomly chosen from the rageWords array)
+#define RAGE_PHRASE_GAP 0.0f // horizontal gap between phrases (0 = no gap, the text is drawn right next to each other)
 
-static float rageSpawnTimer = 0.0f;
-static bool rageEventActive = false;
-static float rageEventTimer = 0.0f;
+static float rageSpawnTimer = 0.0f; // time until the next rage event (randomly chosen between RAGE_QUIET_MIN_MS and RAGE_QUIET_MAX_MS)
+static bool rageEventActive = false; // true if the rage overlay is currently being drawn
+static float rageEventTimer = 0.0f; // time since the rage overlay started (used to determine when to stop drawing it)
 
-static const char* rageWords[] =
+static const char* rageWords[] = // the text that can be drawn in the rage overlay
 {
     "SKILL ISSUE",
     "TOO SLOW",
@@ -228,7 +275,7 @@ static const char* rageWords[] =
 };
 
 #define RAGE_WORD_COUNT \
-    ((int)(sizeof(rageWords) / sizeof(rageWords[0])))
+    ((int)(sizeof(rageWords) / sizeof(rageWords[0]))) // size of all slots ÷ size of one slot = number of slots, each string above is one entry in the array.
 
 /* ============================================================
    Types
@@ -239,7 +286,7 @@ typedef enum
     STATE_PLAYING,
     STATE_ENEMY_WALK,
     STATE_GRAB,
-    STATE_DYING        /* pin plays a hole / oil death animation in place */
+    STATE_DYING /* pin plays a hole / oil death animation in place */
 } GameplayPhase;
 
 typedef enum
@@ -300,11 +347,15 @@ Animation runAnim;
 Animation chaseAnim;
 Animation grabAnim;
 
+static Animation reviveAnim;
 static GameplayPhase state;
 
 /* Background and scoreboard. */
 static CP_Image bgImage = NULL;
 static CP_Image borderImage = NULL;
+
+static CP_Image hudCoinImage = NULL;
+#define HUD_SCALE fminf(WIN_W / 1280.0f, WIN_H / 720.0f)
 
 static CP_Font scoreFont = NULL;
 static CP_Font deathFont = NULL;
@@ -314,6 +365,14 @@ static float score = 0.0f;
 static float distanceTimer = 0.0f;
 static int highScore = 0;
 static int highScoreAtStart = 0;
+static float deathHoldTimer = 0.0f;
+
+// results for the current run.
+static float runSurvivalSeconds = 0.0f;
+static const char* runDeathCause = "unknown";
+static bool runResultReady = false;
+
+static bool telemetryEnabled = true; // set to false to disable telemetry events (for testing or debugging)
 
 /* Power-up state. */
 static float invincibleTimer = 0.0f;
@@ -326,6 +385,14 @@ static float pu_x = 0.0f;
 static int pu_lane = 0;
 static int pu_type = 0;
 static float puSpawnTimer = 0.0f;
+
+/* [ADDED BY LEKKAR] Heart pickup state */
+/* Heart pickup (one on screen at a time). */
+static bool  heart_active = false;
+static float heart_x = 0.0f;
+static int   heart_lane = 0;
+static float heartSpawnTimer = 0.0f;
+static CP_Image heartPickupImg = NULL;
 
 /* Mystery box + roulette. */
 static Animation boxAnim;               /* the box in the lane */
@@ -349,6 +416,7 @@ static int coinCount = 0;
 
 /*Multiplier sprite sheets*/
 static Animation multiFx;
+static CP_Image multiplierItemImg = NULL;
 
 /* Star pickup and the score multiplier it raises. */
 static bool  multiplier_active = false;
@@ -364,13 +432,6 @@ static const float pinYOffset[NUM_LANES] =
     0.0f,
     -50.0f
 };
-
-//static const float obsYOffset[NUM_LANES] =
-//{
-//    120.0f,
-//    65.0f,
-//    10.0f
-//};
 
 // smaller value = higher on the screen, larger value = lower on the screen.
 static const float obstacleLaneCenter[NUM_LANES] =
@@ -394,19 +455,14 @@ static const char* obsPaths[NUM_OBS_TYPES] =
     "../Assets/pixil-layer-hole.png"
 };
 
-/* ============================================================
-   Obstacle and death event animations
-   (the sprite sheets are still to come: until a PNG exists the game
-   falls back to the old behaviour, so nothing breaks)
-   ============================================================ */
-
+// obstacle animation data (shared sprite sheet, one frame counter per obstacle). 
 typedef struct
 {
     const char* path;
     int frames;
-    float w;            /* size of ONE frame in the PNG */
+    float w; /* size of ONE frame in the PNG */
     float h;
-    float frameTime;    /* seconds per frame */
+    float frameTime; /* seconds per frame */
 } FxSheetInfo;
 
 /* Edit path / frame count / frame size / speed when the art is ready. */
@@ -473,6 +529,28 @@ static void Anim_SetDrawSize(Animation* a, float w, float h)
 {
     a->drawW = w;
     a->drawH = h;
+}
+
+static void Anim_FitHorizontalSheet(Animation* a, float drawHeight)
+{
+    if (a == NULL || a->sheet == NULL || a->frameCount <= 0)
+    {
+        return;
+    }
+
+    int sheetWidth = CP_Image_GetWidth(a->sheet);
+    int sheetHeight = CP_Image_GetHeight(a->sheet);
+
+    if (sheetWidth <= 0 || sheetHeight <= 0)
+    {
+        return;
+    }
+
+    a->frameW = (float)sheetWidth / (float)a->frameCount;
+    a->frameH = (float)sheetHeight;
+
+    a->drawH = drawHeight;
+    a->drawW = drawHeight * (a->frameW / a->frameH);
 }
 
 void Anim_Reset(Animation* a)
@@ -631,6 +709,12 @@ int Game_GetHighScore(void)
 void StartRun(void)
 {
     state = STATE_PLAYING;
+	enemyGround = PinFeetY(1); // set the initial ball ground position explicitly to the middle lane.
+    reviveAnimTimer = 0.0f;
+
+    runSurvivalSeconds = 0.0f;  // start this run's timer at zero.
+    runDeathCause = "unknown";  // no fatal obstacle yet.
+    runResultReady = false;     // this run has not finished yet.
 
     lane = 1;
     speed = START_SPEED;
@@ -639,6 +723,7 @@ void StartRun(void)
     distance = 0;
     distanceTimer = 0.0f;
     highScoreAtStart = highScore;
+    deathHoldTimer = 0.0f;
 
     invincibleTimer = 0.0f;
     shieldTimer = 0.0f;
@@ -647,6 +732,10 @@ void StartRun(void)
 
     pu_active = false;
     puSpawnTimer = CP_Random_RangeFloat(PU_SPAWN_MIN, PU_SPAWN_MAX);
+
+    // [ADDED BY LEKKAR] Reset heart pickup for a new run
+    heart_active = false;
+    heartSpawnTimer = CP_Random_RangeFloat(HEART_SPAWN_MIN, HEART_SPAWN_MAX);
 
     rouletteTimer = 0.0f;
     rouletteSwitch = 0.0f;
@@ -663,7 +752,8 @@ void StartRun(void)
     multiplierSpawnTimer = CP_Random_RangeFloat(MULT_SPAWN_MIN, MULT_SPAWN_MAX);
     scoreMultiplier = 1;
 
-    enemyX = (float)width * 0.12f;
+    // centre on the left edge: roughly half the ball is visible.
+    enemyX = 0.0f;
     enemyGround = PinFeetY(lane);
 
     Anim_Reset(&runAnim);
@@ -690,7 +780,8 @@ static void PlayDeathAudio(void)
 /* Ball catches the pin (barrier deaths, or when there is no death art yet). */
 static void KillPlayer(void)
 {
-    state = STATE_ENEMY_WALK;
+    state = STATE_GRAB;
+    Anim_Reset(&grabAnim);
     PlayDeathAudio();
 }
 
@@ -730,7 +821,7 @@ static const SheetInfo puFxInfo[NUM_POWERUPS] =
 {
     { "../Assets/invincible_anim.png", 4, 384.0f, 426.0f, 0.15f },
     { "../Assets/pixil-layer-Pin Shield (500).png",     4, 500.0f, 500.0f, 0.10f },
-    { "../Assets/fx_magnet.png",     6, 128.0f, 128.0f, 0.10f }
+    { "../Assets/pixil-layer-Magnet-animation.png", 4, 120.0f, 120.0f, 0.15f }
 };
 
 static const char* puLabels[NUM_POWERUPS] = { "I", "S", "M" };
@@ -893,6 +984,33 @@ static void SpawnMultiplier(void)
 
     /* No clear lane right now: try again next frame. */
 }
+// [ADDED BY LEKKAR] Spawn heart in a clear lane
+static void TrySpawnHeart(void)
+{
+    for (int tries = 0; tries < 6; tries++)
+    {
+        int l = CP_Random_RangeInt(0, NUM_LANES - 1);
+        float x = (float)width + 100.0f * gameScale;
+
+        if (!LaneClearAt(x, l, 300.0f * gameScale))
+        {
+            continue;
+        }
+
+        if (pu_active && pu_lane == l &&
+            fabsf(pu_x - x) < 250.0f * gameScale)
+        {
+            continue;
+        }
+
+        heart_active = true;
+        heart_x = x;
+        heart_lane = l;
+        heartSpawnTimer = CP_Random_RangeFloat(HEART_SPAWN_MIN, HEART_SPAWN_MAX);
+        return;
+    }
+}
+
 /* A barrier breaks: play the break animation and hold its last frame.
    It keeps scrolling with the world and respawns normally off screen. */
 static void BreakObstacle(int i)
@@ -1002,10 +1120,39 @@ static bool HandleHit(int i)
     }
     lives--;
 
+    // [ADDED BY LEKKAR] Schedule heart after taking damage
+    if (!heart_active)
+    {
+        heartSpawnTimer = CP_Random_RangeFloat(HEART_FIRST_DELAY_MIN,
+            HEART_FIRST_DELAY_MAX);
+    }
+
     if (lives <= 0)
     {
         lives = 0;
         hurt_timer = 0.0f;
+
+        // record the obstacle that removed the final heart.
+        switch (type)
+        {
+        case OBS_BARRIER:
+            runDeathCause = "barrier";
+            break;
+
+        case OBS_OIL:
+            runDeathCause = "oil";
+            break;
+
+        case OBS_HOLE:
+            runDeathCause = "hole";
+            break;
+
+        default:
+            runDeathCause = "unknown";
+            break;
+        }
+
+        runResultReady = true;  // the final results can now be submitted.
 
         /* Holes and oil have their own death animation. */
         Animation* dyingAnim = NULL;
@@ -1129,6 +1276,23 @@ static void Draw_Pickups(void)
             CP_Font_DrawText("?", pu_x, y);
         }
     }
+    // [ADDED BY LEKKAR] Draw bobbing heart pickup
+    if (heart_active)
+    {
+        float bob = sinf(CP_System_GetSeconds() * 5.0f) * 6.0f * gameScale;
+        float s = HEART_PICKUP_SIZE * gameScale;
+        float y = PlayerCenterY(heart_lane) + bob;
+        if (heartPickupImg != NULL)
+        {
+            CP_Image_Draw(heartPickupImg, heart_x, y, s, s, 255);
+        }
+        else if (heart_full != NULL)
+        {
+            // Fallback to the regular heart image if ExtraLife item failed to load
+            CP_Image_Draw(heart_full, heart_x, y, s, s, 255);
+        }
+    }
+
 }
 
 /* Draws a power-up icon (or a coloured circle with a letter if the sheet is missing). */
@@ -1169,7 +1333,7 @@ static void Draw_Roulette(void)
     }
 
     float x = (float)width / 2.0f;
-    float y = 90.0f * gameScale;
+    float y = 145.0f * HUD_SCALE;
     float boxSize = (PU_SIZE + 40.0f) * gameScale;
 
     /* dark square behind the icon */
@@ -1206,6 +1370,13 @@ static void Draw_Roulette(void)
 /* Multiplier sprite sheet, or a plain circle if it's missing. */
 static void Draw_Multiplier(float x, float y)
 {
+    float size = MULT_SIZE * gameScale;
+    if (multiplierItemImg != NULL)
+    {
+        CP_Image_Draw(multiplierItemImg, x, y, size, size, 255);
+        return;
+    }
+
     if (multiFx.sheet != NULL)
     {
         Anim_Draw(&multiFx, x, y);
@@ -1214,66 +1385,469 @@ static void Draw_Multiplier(float x, float y)
 
     CP_Settings_NoStroke();
     CP_Settings_Fill(CP_Color_Create(255, 0, 0, 90));
-    CP_Graphics_DrawCircle(x, y, MULT_SIZE * gameScale);
+    CP_Graphics_DrawCircle(x, y, size);
+}
 
+static void DrawHUDPanel(
+    float x,
+    float y,
+    float w,
+    float h,
+    int hovered)
+{
+    float s = HUD_SCALE;
+    float cut = 7.0f * s;
+
+    float left = x - w * 0.5f;
+    float right = x + w * 0.5f;
+    float top = y - h * 0.5f;
+    float bottom = y + h * 0.5f;
+
+    CP_Settings_RectMode(CP_POSITION_CORNER);
+    CP_Settings_NoStroke();
+
+    CP_Settings_Fill(
+        hovered
+        ? CP_Color_Create(35, 35, 40, 235)
+        : CP_Color_Create(5, 5, 10, 220)
+    );
+
+    /* Fill an eight-sided, clipped-corner rectangle. */
+    CP_Graphics_DrawRect(
+        left + cut,
+        top,
+        w - 2.0f * cut,
+        h
+    );
+
+    CP_Graphics_DrawRect(
+        left,
+        top + cut,
+        w,
+        h - 2.0f * cut
+    );
+
+    CP_Graphics_DrawTriangle(
+        left + cut, top,
+        left + cut, top + cut,
+        left, top + cut
+    );
+
+    CP_Graphics_DrawTriangle(
+        right - cut, top,
+        right, top + cut,
+        right - cut, top + cut
+    );
+
+    CP_Graphics_DrawTriangle(
+        left, bottom - cut,
+        left + cut, bottom - cut,
+        left + cut, bottom
+    );
+
+    CP_Graphics_DrawTriangle(
+        right - cut, bottom - cut,
+        right, bottom - cut,
+        right - cut, bottom
+    );
+
+    /* Light border. */
+    CP_Settings_Stroke(
+        hovered
+        ? CP_Color_Create(255, 225, 100, 255)
+        : CP_Color_Create(205, 205, 215, 255)
+    );
+
+    CP_Settings_StrokeWeight(2.0f * s);
+
+    CP_Graphics_DrawLine(left + cut, top, right - cut, top);
+    CP_Graphics_DrawLine(right - cut, top, right, top + cut);
+
+    CP_Graphics_DrawLine(
+        right, top + cut,
+        right, bottom - cut
+    );
+
+    CP_Graphics_DrawLine(
+        right, bottom - cut,
+        right - cut, bottom
+    );
+
+    CP_Graphics_DrawLine(
+        right - cut, bottom,
+        left + cut, bottom
+    );
+
+    CP_Graphics_DrawLine(
+        left + cut, bottom,
+        left, bottom - cut
+    );
+
+    CP_Graphics_DrawLine(
+        left, bottom - cut,
+        left, top + cut
+    );
+
+    CP_Graphics_DrawLine(left, top + cut, left + cut, top);
+
+    CP_Settings_NoStroke();
+}
+
+/* Fit longer values inside their panel. */
+static void DrawHUDText(
+    const char* text,
+    float x,
+    float y,
+    float preferredSize,
+    float availableWidth,
+    CP_Color color)
+{
+    size_t length = strlen(text);
+    float size = preferredSize;
+
+    if (length > 0)
+    {
+        float maximumSize = availableWidth / (float)length;
+        size = fminf(size, maximumSize);
+    }
+
+    CP_Settings_TextAlignment(
+        CP_TEXT_ALIGN_H_CENTER,
+        CP_TEXT_ALIGN_V_MIDDLE
+    );
+
+    CP_Settings_TextSize(size);
+    CP_Settings_Fill(color);
+    CP_Font_DrawText(text, x, y);
 }
 
 static void Draw_HUD(void)
 {
-    char line[48];
-    //float y = 110.0f;
+    char text[64];
+
+    float s = HUD_SCALE;
+    float y = 48.0f * s;
+    float panelH = 60.0f * s;
+
+    CP_Color white = CP_Color_Create(245, 245, 245, 255);
+    CP_Color gold = CP_Color_Create(255, 220, 65, 255);
 
     if (scoreFont != NULL)
     {
         CP_Font_Set(scoreFont);
     }
 
+    CP_Settings_ImageMode(CP_POSITION_CENTER);
     CP_Settings_NoStroke();
-    CP_Settings_TextSize(25.0f);
 
-    CP_Settings_TextAlignment(
-        CP_TEXT_ALIGN_H_LEFT,
-        CP_TEXT_ALIGN_V_TOP
+    /* ==================== SCORE ==================== */
+    float scoreX = 84.0f * s;
+
+    DrawHUDPanel(
+        scoreX,
+        y,
+        136.0f * s,
+        panelH,
+        0
     );
 
-    CP_Settings_Fill(CP_Color_Create(255, 215, 0, 255));
-    snprintf(line, sizeof(line), "COINS %d", coinCount);
-    CP_Font_DrawText(line, 220.0f, 50.0f);
-    //y += 30.0f;
+    DrawHUDText(
+        "SCORE",
+        scoreX,
+        y - 15.0f * s,
+        13.0f * s,
+        112.0f * s,
+        white
+    );
 
-    CP_Settings_Fill(CP_Color_Create(255, 255, 80, 255));
-    snprintf(line, sizeof(line), "x%d", scoreMultiplier);
-    CP_Font_DrawText(line, 1100.0f, 50.0f);
+    snprintf(
+        text,
+        sizeof(text),
+        "%05d",
+        (int)score
+    );
+
+    DrawHUDText(
+        text,
+        scoreX,
+        y + 12.0f * s,
+        23.0f * s,
+        112.0f * s,
+        gold
+    );
+
+    /* ==================== COINS ==================== */
+    float coinX = 222.0f * s;
+
+    DrawHUDPanel(
+        coinX,
+        y,
+        116.0f * s,
+        panelH,
+        0
+    );
+
+    if (hudCoinImage != NULL)
+    {
+        CP_Image_Draw(
+            hudCoinImage,
+            coinX - 35.0f * s,
+            y,
+            28.0f * s,
+            38.0f * s,
+            255
+        );
+    }
+    else
+    {
+        CP_Settings_Fill(gold);
+
+        CP_Graphics_DrawCircle(
+            coinX - 35.0f * s,
+            y,
+            25.0f * s
+        );
+    }
+
+    snprintf(
+        text,
+        sizeof(text),
+        "x%02d",
+        coinCount
+    );
+
+    DrawHUDText(
+        text,
+        coinX + 15.0f * s,
+        y,
+        23.0f * s,
+        70.0f * s,
+        white
+    );
+	 // hearts remain in their own panel, drawn by Draw_Hearts(). panel ends at x = 472 * s.
+
+     /* ==================== DISTANCE ==================== */
+
+    float distanceX = WIN_W - 153.0f * s;
+
+    DrawHUDPanel(
+        distanceX,
+        y,
+        130.0f * s,
+        panelH,
+        0
+    );
+
+    snprintf(
+        text,
+        sizeof(text),
+        "%dm",
+        distance
+    );
+
+    DrawHUDText(
+        text,
+        distanceX,
+        y,
+        23.0f * s,
+        108.0f * s,
+        white
+    );
+
+    /* ==================== MULTIPLIER ==================== */
+    float multiplierX = WIN_W - 272.0f * s;
+
+    DrawHUDPanel(
+        multiplierX,
+        y,
+        84.0f * s,
+        panelH,
+        0
+    );
+
+    snprintf(
+        text,
+        sizeof(text),
+        "x%d",
+        scoreMultiplier
+    );
+
+    DrawHUDText(
+        text,
+        multiplierX,
+        y,
+        25.0f * s,
+        64.0f * s,
+        gold
+    );
+
+    /* ==================== POWER-UP TIMERS ==================== */
+    float timerLeft = 484.0f * s;
+    float timerRight = WIN_W - 326.0f * s;
+    float timerAreaWidth = timerRight - timerLeft;
+
+    int activeTypes[NUM_POWERUPS];
+    float activeSeconds[NUM_POWERUPS];
+    int activeCount = 0;
 
     if (invincibleTimer > 0.0f)
     {
-        CP_Settings_Fill(PowerColor(PU_INVINCIBLE, 255));
-        snprintf(line, sizeof(line), "INVINCIBLE %.1f", invincibleTimer);
-        CP_Font_DrawText(line, 700.0f, 50.0f);
-        //y += 30.0f;
+        activeTypes[activeCount] = PU_INVINCIBLE;
+        activeSeconds[activeCount] = invincibleTimer;
+        activeCount++;
     }
 
     if (shieldTimer > 0.0f)
     {
-        CP_Settings_Fill(PowerColor(PU_SHIELD, 255));
-        snprintf(line, sizeof(line), "SHIELD %.1f", shieldTimer);
-        CP_Font_DrawText(line, 700.0f, 50.0f);
-        //y += 30.0f;
+        activeTypes[activeCount] = PU_SHIELD;
+        activeSeconds[activeCount] = shieldTimer;
+        activeCount++;
     }
 
     if (magnetTimer > 0.0f)
     {
-        CP_Settings_Fill(PowerColor(PU_MAGNET, 255));
-        snprintf(line, sizeof(line), "MAGNET %.1f", magnetTimer);
-        CP_Font_DrawText(line, 700.0f, 50.0f);
-        //y += 30.0f;
+        activeTypes[activeCount] = PU_MAGNET;
+        activeSeconds[activeCount] = magnetTimer;
+        activeCount++;
     }
+
+    if (activeCount > 0 && timerAreaWidth > 0.0f)
+    {
+        float panelGap = 8.0f * s;
+
+        float effectPanelWidth =
+            (
+                timerAreaWidth -
+                panelGap * (float)(activeCount - 1)
+                ) / (float)activeCount;
+
+        if (scoreFont != NULL)
+        {
+            CP_Font_Set(scoreFont);
+        }
+
+        for (int i = 0; i < activeCount; i++)
+        {
+            int type = activeTypes[i];
+            const char* effectName;
+            char secondsText[32];
+
+            float effectX =
+                timerLeft +
+                effectPanelWidth * 0.5f +
+                (float)i * (effectPanelWidth + panelGap);
+
+			// shorten the name if multiple effects are active, to fit the panel.
+            switch (type)
+            {
+            case PU_INVINCIBLE:
+                effectName =
+                    activeCount == 1 ? "INVINCIBLE" : "INV";
+                break;
+
+            case PU_SHIELD:
+                effectName =
+                    activeCount == 1 ? "SHIELD" : "SHD";
+                break;
+
+            default:
+                effectName =
+                    activeCount == 1 ? "MAGNET" : "MAG";
+                break;
+            }
+
+            snprintf(
+                secondsText,
+                sizeof(secondsText),
+                "%.1fs",
+                activeSeconds[i]
+            );
+
+            DrawHUDPanel(
+                effectX,
+                y,
+                effectPanelWidth,
+                panelH,
+                0
+            );
+
+			// how much space is left for text after the padding on both sides of the panel?
+            float padding = 14.0f * s;
+            float availableWidth =
+                fmaxf(1.0f, effectPanelWidth - 2.0f * padding);
+
+            float textSize = 23.0f * s;
+
+			// reduce the text size if the name + countdown + gap is too wide for the panel.
+            float characterSlots =
+                (float)strlen(effectName) +
+                (float)strlen(secondsText) +
+                1.5f;
+
+            textSize = fminf(
+                textSize,
+                availableWidth / characterSlots
+            );
+
+            float nameWidth =
+                (float)strlen(effectName) * textSize;
+
+            float secondsWidth =
+                (float)strlen(secondsText) * textSize;
+
+            float textGap = 1.5f * textSize;
+
+            float groupWidth =
+                nameWidth + textGap + secondsWidth;
+
+            float groupLeft = effectX - groupWidth * 0.5f;
+
+            CP_Settings_TextSize(textSize);
+
+			// draw the name in the power-up's colour, on the left side of the panel.
+            CP_Settings_TextAlignment(
+                CP_TEXT_ALIGN_H_LEFT,
+                CP_TEXT_ALIGN_V_MIDDLE
+            );
+
+            CP_Settings_Fill(PowerColor(type, 255));
+
+            CP_Font_DrawText(
+                effectName,
+                groupLeft,
+                y
+            );
+
+			// draw the countdown in white, on the right side of the panel.
+            CP_Settings_Fill(
+                CP_Color_Create(245, 245, 245, 255)
+            );
+
+            CP_Font_DrawText(
+                secondsText,
+                groupLeft + nameWidth + textGap,
+                y
+            );
+        }
+    }
+
+    CP_Settings_NoStroke();
+    CP_Settings_RectMode(CP_POSITION_CORNER);
 }
 
 /* ============================================================
-   Rage overlay helpers
+   [ADDED BY GWEN] Rage overlay helpers
    ============================================================ */
 
+   /*! Specification for function RageOverlay_Reset:
+   @brief Resets the rage words overlay and sets a random waiting time.
+
+   Hides the rage words and sets a waiting time of 6 to 22 seconds
+   before the next rage event.
+
+   @param none.
+   @return none.
+   *//*________________________________________________________________________________*/
 static void RageOverlay_Reset(void)
 {
     rageEventActive = false;
@@ -1286,6 +1860,15 @@ static void RageOverlay_Reset(void)
         ) / 1000.0f;
 }
 
+/*! Specification for function RageOverlay_Update:
+@brief Updates the timers that show and hide the rage words.
+
+Starts a rage event when the waiting time ends. After 6 seconds,
+hides the words and sets another random waiting time.
+
+@param dt - The time passed since the previous frame, in seconds.
+@return none.
+*//*________________________________________________________________________________*/
 static void RageOverlay_Update(float dt)
 {
     if (dt < 0.0f)
@@ -1325,6 +1908,15 @@ static void RageOverlay_Update(float dt)
     }
 }
 
+/*! Specification for function RageOverlay_Draw:
+@brief Draws the rage words moving across the screen.
+
+During an active rage event, displays rows of coloured phrases
+moving from right to left. Scales the text to fit the window size.
+
+@param none.
+@return none.
+*//*________________________________________________________________________________*/
 static void RageOverlay_Draw(void)
 {
     if (!rageEventActive || rageFont == NULL)
@@ -1384,6 +1976,7 @@ static void RageOverlay_Draw(void)
 
         float stagger = (float)(row % 3) * 120.0f;
 
+        // calculate the starting and ending x positions for the row of phrases
         float startX = screenW + stagger;
         float endX = -rowWidth - 50.0f;
 
@@ -1441,7 +2034,7 @@ static void RageOverlay_Draw(void)
 
 void Game_Init(void)
 {
-    CP_System_SetWindowTitle("ALLEY RUNNER - BUILD CHECK 123");
+    CP_System_SetWindowTitle("ALLEY RUNNER");
     CP_Settings_NoStroke();
 
     CP_Settings_ImageMode(CP_POSITION_CENTER);
@@ -1460,7 +2053,23 @@ void Game_Init(void)
     /*Hearts*/
     heart_full = CP_Image_Load("../Assets/hearts.png");
 
-    /* Rage overlay font. */
+    hudCoinImage = CP_Image_Load("../Assets/Coin_solo.png");
+    multiplierItemImg = CP_Image_Load("../Assets/pixil-layer-multiplier-ball-item.png");
+    if (multiplierItemImg == NULL) multiplierItemImg = CP_Image_Load("Assets/pixil-layer-multiplier-ball-item.png");
+
+    if (hudCoinImage == NULL)
+    {
+        hudCoinImage = CP_Image_Load("Assets/Coin_solo.png");
+    }
+
+    // [ADDED BY LEKKAR] Load heart pickup image
+    heartPickupImg = CP_Image_Load("../Assets/pixil-layer-ExtraLife-item.png");
+    if (heartPickupImg == NULL)
+        heartPickupImg = CP_Image_Load("Assets/pixil-layer-ExtraLife-item.png");
+    if (heartPickupImg == NULL)
+        heartPickupImg = CP_Image_Load("./Assets/pixil-layer-ExtraLife-item.png");
+
+    // [ADDED BY GWEN] rage words font: try the relative path first, then the local path if that fails.
     rageFont = CP_Font_Load("../Assets/VT323-Regular.ttf");
 
     if (rageFont == NULL)
@@ -1482,53 +2091,23 @@ void Game_Init(void)
     gameMusic = CP_Sound_Load("../Assets/bg_music.mp3");
     sndHit = CP_Sound_Load("../Assets/edr-video-game-hit-noise-001-135821.mp3");
 
+    // [ADDED BY LEKKAR] Load heart pickup sound
+    sndHeart = CP_Sound_Load("../Assets/heart_sound.mp3");
+
     if (gameMusic != NULL)
     {
         CP_Sound_PlayAdvanced(gameMusic, 1.0f, 1.0f, true, CP_SOUND_GROUP_MUSIC);
     }
 
     // Updated character sprite sheets.
-    Anim_Init(
-        &runAnim,
-        "../Assets/pixil-layer-Pin Running.png",
-        4,
-        PLAYER_W,
-        PLAYER_H,
-        0.15f,
-        1
-    );
+    Anim_Init(&runAnim, "../Assets/bowling_pin_running.png", 4, PLAYER_W, PLAYER_H, 0.15f, 1);
+    Anim_Init(&chaseAnim, "../Assets/bowling_ball_chasing.png", 8, ENEMY_W, ENEMY_H, 0.15f, 1);
+    Anim_Init(&grabAnim, "../Assets/pin_death_by_ball.png", 7, 1000.0f, 500.0f, DEATH_FRAME_TIME, 0 );
 
-    Anim_Init(
-        &chaseAnim,
-        "../Assets/pixil-layer-Ball Rolling (350).png",
-        8,
-        ENEMY_W,
-        ENEMY_H,
-        0.15f,
-        1
-    );
-
-    Anim_Init(&grabAnim, "../Assets/pixil-layer-0 (3).png",
-        8, 2000, 1000, DEATH_FRAME_TIME, 0);
-
-    /* scale character display sizes with the window height. */
-    Anim_SetDrawSize(
-        &runAnim,
-        PLAYER_W * gameScale,
-        PLAYER_H * gameScale
-    );
-
-    Anim_SetDrawSize(
-        &chaseAnim,
-        ENEMY_W * gameScale,
-        ENEMY_H * gameScale
-    );
-
-    Anim_SetDrawSize(
-        &grabAnim,
-        GRAB_W * gameScale * DEATH_SCALE,
-        GRAB_H * gameScale * DEATH_SCALE
-    );
+	/* scale character display sizes with the game window */
+    Anim_SetDrawSize(&runAnim, 120.0f, 120.0f);
+    Anim_SetDrawSize(&chaseAnim, 500.0f, 500.0f);
+    Anim_SetDrawSize(&grabAnim, 1000.0f, 500.0f);
 
     /* Obstacle images. */
     for (int t = 0; t < NUM_OBS_TYPES; t++)
@@ -1545,14 +2124,16 @@ void Game_Init(void)
 
         // limit the obstacle height to 38% of a lane's height.
         float obstacleHeight = lane_gap * 0.6f;
-        float obstacleWidth =
-            obstacleHeight * (OBS_SRC_W / OBS_SRC_H);
+        float obstacleWidth = obstacleHeight * (OBS_SRC_W / OBS_SRC_H);
 
-        Anim_SetDrawSize(
-            &obsAnim[t],
-            obstacleWidth,
-            obstacleHeight
-        );
+        for (int t = 0; t < NUM_OBS_TYPES; ++t)
+        {
+            Anim_SetDrawSize(
+                &obsAnim[t],
+                obstacleWidth,
+                obstacleHeight
+            );
+        }
     }
 
     /* Obstacle event animations, drawn at the obstacle's size. */
@@ -1567,28 +2148,17 @@ void Game_Init(void)
         obsAnim[OBS_BARRIER].drawW, obsAnim[OBS_BARRIER].drawH);
 
     /* Pin death animations (hole / oil), same scale as the obstacles. */
-    Anim_Init(&holeDeathAnim, holeDeathInfo.path, holeDeathInfo.frames,
-        holeDeathInfo.w, holeDeathInfo.h, holeDeathInfo.frameTime, 0);
-    Anim_SetDrawSize(&holeDeathAnim,
-        obsAnim[OBS_HOLE].drawW * 1.45f, obsAnim[OBS_HOLE].drawH * 1.45f );
-
-    Anim_Init(&oilDeathAnim, oilDeathInfo.path, oilDeathInfo.frames,
-        oilDeathInfo.w, oilDeathInfo.h, oilDeathInfo.frameTime, 0);
-    Anim_SetDrawSize(&oilDeathAnim,
-        obsAnim[OBS_OIL].drawW, obsAnim[OBS_OIL].drawH);
+    Anim_Init(&holeDeathAnim, holeDeathInfo.path, holeDeathInfo.frames, holeDeathInfo.w, holeDeathInfo.h, holeDeathInfo.frameTime, 0);
+    Anim_SetDrawSize(&holeDeathAnim, obsAnim[OBS_HOLE].drawW * 1.45f, obsAnim[OBS_HOLE].drawH * 1.45f);
+    Anim_Init(&oilDeathAnim, oilDeathInfo.path, oilDeathInfo.frames, oilDeathInfo.w, oilDeathInfo.h, oilDeathInfo.frameTime, 0);
+    Anim_SetDrawSize(&oilDeathAnim, obsAnim[OBS_OIL].drawW, obsAnim[OBS_OIL].drawH);
 
     activeDeathAnim = NULL;
 
     /* Coin animation (one shared animation for every coin). */
-    Anim_Init(
-        &coinAnim,
-        "../Assets/Coin.png", COIN_FRAMES, COIN_SRC_W, COIN_SRC_H, COIN_FRAME_TIME, 1);
+    Anim_Init(&coinAnim, "../Assets/Coin.png", COIN_FRAMES, COIN_SRC_W, COIN_SRC_H, COIN_FRAME_TIME, 1);
 
-    Anim_SetDrawSize(
-        &coinAnim,
-        COIN_SIZE * gameScale * (COIN_SRC_W / COIN_SRC_H),
-        COIN_SIZE * gameScale
-    );
+    Anim_SetDrawSize(&coinAnim, COIN_SIZE * gameScale * (COIN_SRC_W / COIN_SRC_H), COIN_SIZE * gameScale);
 
     /* Power-up icons and effects. */
     for (int t = 0; t < NUM_POWERUPS; t++)
@@ -1602,6 +2172,11 @@ void Game_Init(void)
             puIconInfo[t].frameTime,
             1
         );
+
+        if (puFx[t].sheet == NULL && puFxInfo[t].path[0] == '.' && puFxInfo[t].path[1] == '.')
+        {
+            puFx[t].sheet = CP_Image_Load(puFxInfo[t].path + 3);
+        }
 
         Anim_SetDrawSize(
             &puIconAnim[t],
@@ -1622,21 +2197,54 @@ void Game_Init(void)
         float fxH = PU_FX_SIZE * gameScale;
         float fxW = fxH * (puFxInfo[t].w / puFxInfo[t].h);
 
-        if (t == PU_SHIELD)
-        {
-            fxW = runAnim.drawW;   /* same size as the pin */
+        if (t == PU_SHIELD || t == PU_MAGNET) {
+            fxW = runAnim.drawW;
             fxH = runAnim.drawH;
         }
-        else if (t == PU_INVINCIBLE)
-        {
-            fxH = runAnim.drawH * INVINCIBLE_ANIM_SCALE;
+        else if (t == PU_INVINCIBLE) {
+            fxH = runAnim.drawH * INVINCIBLE_ANIM_SCALE; // same size as the pin
             fxW = fxH * (puFxInfo[t].w / puFxInfo[t].h);
         }
 
         Anim_SetDrawSize(&puFx[t], fxW, fxH);
     }
 
-    /* Mystery box shown in the lane before the power-up is picked up. */
+    // Revive extra-life angel pin animation: load once.
+    Anim_Init(
+        &reviveAnim,
+        "../Assets/pixil-layer-ExtraLife-animation.png",
+        4,
+        120.0f,
+        120.0f,
+        0.15f,
+        1
+    );
+
+    if (reviveAnim.sheet == NULL)
+    {
+        reviveAnim.sheet = CP_Image_Load(
+            "Assets/pixil-layer-ExtraLife-animation.png"
+        );
+    }
+
+    if (reviveAnim.sheet == NULL)
+    {
+        reviveAnim.sheet = CP_Image_Load(
+            "./Assets/pixil-layer-ExtraLife-animation.png"
+        );
+    }
+
+    Anim_FitHorizontalSheet(
+        &puFx[PU_MAGNET],
+        runAnim.drawH
+    );
+
+    Anim_FitHorizontalSheet(
+        &reviveAnim,
+        runAnim.drawH
+    );;
+
+    // Mystery box shown in the lane before the power-up is picked up.
     Anim_Init(
         &boxAnim,
         "../Assets/mystery_box.png",
@@ -1732,13 +2340,22 @@ static void Draw_World(void)
 
     if (state == STATE_GRAB)
     {
-        float k = DEATH_SCALE * gameScale;
+        float scaleX = grabAnim.drawW / grabAnim.frameW;
+        float scaleY = grabAnim.drawH / grabAnim.frameH;
 
-        /* the running pin's feet sit about 7px above its frame bottom */
-        float feetY = PinFeetY(lane) - 7.0f * gameScale;
+        // approximate pin anchor in the first frame of this death sheet.
+        const float sourcePinX = 733.0f;
+        const float sourcePinFeetY = 475.0f;
 
-        float cx = player_x + (GRAB_W / 2.0f - DEATH_PIN_SRC_X) * k;
-        float cy = feetY - (DEATH_PIN_SRC_FEET - GRAB_H / 2.0f) * k;
+        // the running pin has a little padding below its feet.
+        float runningFeetY =
+            PinFeetY(lane) - 7.0f * (runAnim.drawH / PLAYER_H);
+
+        float cx = player_x
+            + (grabAnim.frameW * 0.5f - sourcePinX) * scaleX;
+
+        float cy = runningFeetY
+            + (grabAnim.frameH * 0.5f - sourcePinFeetY) * scaleY;
 
         Anim_Draw(&grabAnim, cx, cy);
     }
@@ -1749,7 +2366,7 @@ static void Draw_World(void)
         {
             float deathX = obs_x[deathObs] + obsAnim[obs_type[deathObs]].drawW / 2.0f;
             float deathY = (float)height * obstacleLaneCenter[obs_lane[deathObs]];
-            
+
             if (obs_type[deathObs] == OBS_HOLE)
             {
                 deathY -= 35.0f * gameScale;
@@ -1765,9 +2382,9 @@ static void Draw_World(void)
         Anim_Draw(
             &chaseAnim,
             enemyX,
-            enemyGround +
-            BALL_Y_OFFSET * gameScale -
-            chaseAnim.drawH / 2.0f
+            enemyGround
+            - 7.0f * (runAnim.drawH / PLAYER_H)
+            - chaseAnim.drawH * 0.22f
         );
     }
     else
@@ -1781,7 +2398,8 @@ static void Draw_World(void)
             Draw_PowerFx(PU_INVINCIBLE, player_x, auraY);   /* circle fallback */
         }
 
-        if (magnetTimer > 0.0f)
+		if (magnetTimer > 0.0f && // draw the magnet effect circle behind the pin if the animation is missing
+            puFx[PU_MAGNET].sheet == NULL)
         {
             Draw_PowerFx(PU_MAGNET, player_x, auraY);
         }
@@ -1797,96 +2415,92 @@ static void Draw_World(void)
             player_draw_x = player_x - stumble_lurch * gameScale * frac;              // knocked back, then slides forward
         }
 
-        /* Draw the pin ONCE. While invincible or shielded, the effect sheet already
-           contains the pin, so it is drawn instead of the normal run animation.
-           Its frame follows runAnim so the two never go out of sync. */
         float pinCentreY = pinFeetY - runAnim.drawH / 2.0f;
 
-        if (invincibleTimer > 0.0f && puFx[PU_INVINCIBLE].sheet != NULL)
+        if (reviveAnimTimer > 0.0f &&
+            reviveAnim.sheet != NULL &&
+            reviveAnim.frameCount > 0)
+        {
+            float reviveCentreY = pinFeetY - reviveAnim.drawH / 2.0f;
+
+            Anim_DrawFrame(
+                &reviveAnim,
+                runAnim.currentFrame % reviveAnim.frameCount,
+                player_draw_x,
+                reviveCentreY,
+                player_alpha
+            );
+        }
+        else if (invincibleTimer > 0.0f &&
+            puFx[PU_INVINCIBLE].sheet != NULL &&
+            puFx[PU_INVINCIBLE].frameCount > 0)
         {
             const Animation* inv = &puFx[PU_INVINCIBLE];
-            float invCentreY = pinFeetY - (INVINCIBLE_FEET_FRAC - 0.5f) * inv->drawH;
 
-            Anim_DrawFrame(inv, runAnim.currentFrame % inv->frameCount,
-                player_draw_x, invCentreY, player_alpha);
+            float invCentreY =
+                pinFeetY - (INVINCIBLE_FEET_FRAC - 0.5f) * inv->drawH;
+
+            Anim_DrawFrame(
+                inv,
+                runAnim.currentFrame % inv->frameCount,
+                player_draw_x,
+                invCentreY,
+                player_alpha
+            );
         }
-        else if (shieldTimer > 0.0f && puFx[PU_SHIELD].sheet != NULL)
+        else if (shieldTimer > 0.0f &&
+            puFx[PU_SHIELD].sheet != NULL &&
+            puFx[PU_SHIELD].frameCount > 0)
         {
             const Animation* sh = &puFx[PU_SHIELD];
 
-            Anim_DrawFrame(sh, runAnim.currentFrame % sh->frameCount,
-                player_draw_x, pinCentreY, player_alpha);
+            float shieldCentreY = pinFeetY - sh->drawH / 2.0f;
+
+            Anim_DrawFrame(
+                sh,
+                runAnim.currentFrame % sh->frameCount,
+                player_draw_x,
+                shieldCentreY,
+                player_alpha
+            );
+        }
+        else if (magnetTimer > 0.0f &&
+            puFx[PU_MAGNET].sheet != NULL &&
+            puFx[PU_MAGNET].frameCount > 0)
+        {
+            const Animation* mg = &puFx[PU_MAGNET];
+
+            float magnetCentreY = pinFeetY - mg->drawH / 2.0f;
+
+            Anim_DrawFrame(
+                mg,
+                runAnim.currentFrame % mg->frameCount,
+                player_draw_x,
+                magnetCentreY,
+                player_alpha
+            );
         }
         else
         {
-            Anim_DrawAlpha(&runAnim, player_draw_x, pinCentreY, player_alpha);
-
-            if (shieldTimer > 0.0f)
-            {
-                Draw_PowerFx(PU_SHIELD, player_draw_x, auraY);   /* circle fallback */
-            }
+            Anim_DrawAlpha(
+                &runAnim,
+                player_draw_x,
+                pinCentreY,
+                player_alpha
+            );
         }
 
         // keep the ball anchored at its existing position.
         Anim_Draw(
             &chaseAnim,
             enemyX,
-            enemyGround +
-            BALL_Y_OFFSET * gameScale -
-            chaseAnim.drawH / 2.0f
+            enemyGround
+            - 7.0f * (runAnim.drawH / PLAYER_H)
+            - chaseAnim.drawH * 0.5f
         );
     }
 
-    /* Scoreboard. */
-    if (scoreFont != NULL)
-    {
-        CP_Font_Set(scoreFont);
-    }
-
-    CP_Settings_NoStroke();
-
-    CP_Settings_Fill(
-        CP_Color_Create(255, 255, 255, 255)
-    );
-
-    CP_Settings_TextSize(30.0f);
-
-    CP_Settings_TextAlignment(
-        CP_TEXT_ALIGN_H_LEFT,
-        CP_TEXT_ALIGN_V_TOP
-    );
-
-    CP_Font_DrawText("SCORE", 20.0f, 20.0f);
-
-    char scoreText[32];
-
-    snprintf(
-        scoreText,
-        sizeof(scoreText),
-        "%05d",
-        (int)score
-    );
-
-    CP_Font_DrawText(scoreText, 20.0f, 60.0f);
-
-    snprintf(
-        scoreText,
-        sizeof(scoreText),
-        "%04dm",
-        distance
-    );
-
-    CP_Settings_TextAlignment(
-        CP_TEXT_ALIGN_H_RIGHT,
-        CP_TEXT_ALIGN_V_TOP
-    );
-
-    CP_Font_DrawText(
-        scoreText,
-        (float)width - 200.0f,
-        50.0f
-    );
-
+    // framed header panels for score, coins, multiplier, and distance.
     Draw_HUD();
     Draw_Roulette();
 
@@ -1972,7 +2586,7 @@ static void DrawPillButtonAt(float x, float y, float w, float h, const char* lab
 {
     CP_Settings_RectMode(CP_POSITION_CENTER);
     CP_Settings_Stroke(CP_Color_Create(20, 20, 20, 255));
-    CP_Settings_StrokeWeight(5.0f);
+    CP_Settings_StrokeWeight(5.0f * HUD_SCALE);
 
     if (hovered)
         CP_Settings_Fill(CP_Color_Create(225, 75, 95, 255));
@@ -1992,7 +2606,7 @@ static void DrawPillButtonAt(float x, float y, float w, float h, const char* lab
         CP_Font_Set(pixel_font);
     }
     CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-    CP_Settings_TextSize(h * 0.32f);
+    CP_Settings_TextSize(h * 0.28f);
 
     if (hovered)
         CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
@@ -2009,165 +2623,358 @@ static void DrawDiamondIcon(float x, float y)
     CP_Graphics_DrawTriangle(x - 20.0f, y, x + 20.0f, y, x, y + 22.0f);
 }
 
-void DeathScreen_Draw(const char* title) {
-    char buf[64];
-    float row_x = window_center_x - 300.0f;
+static void FormatDeathNumber(int value, char* output, size_t outputSize)
+{
+    char digits[32];
+    size_t length;
+    size_t written = 0;
 
-    CP_Font_Set(pixel_font);
-    CP_Settings_StrokeWeight(0.0f);
-
-    // Dark red tint
-    CP_Settings_RectMode(CP_POSITION_CORNER);
-    CP_Settings_Fill(CP_Color_Create(40, 0, 0, 170));
-    CP_Graphics_DrawRect(0, 0, WIN_W, WIN_H);
-
-    // Framed box
-    float box_w = WIN_W * 0.6f, box_h = WIN_H * 0.70f;
-    float box_x = window_center_x - box_w / 2.0f, box_y = WIN_H * 0.15f;
-    float t = 6.0f;                           // border thickness
-    CP_Settings_Fill(CP_Color_Create(25, 5, 5, 200));   // lower alpha = more see-through
-    CP_Graphics_DrawRect(box_x, box_y, box_w, box_h);
-    CP_Settings_Fill(CP_Color_Create(180, 50, 50, 255));
-    CP_Graphics_DrawRect(box_x, box_y, box_w, t);                  // top
-    CP_Graphics_DrawRect(box_x, box_y + box_h - t, box_w, t);      // bottom
-    CP_Graphics_DrawRect(box_x, box_y, t, box_h);                  // left
-    CP_Graphics_DrawRect(box_x + box_w - t, box_y, t, box_h);      // right
-
-    // Title with outline + underline bar
-    float title_size = WIN_H * 0.07f;               // keep your own size if you changed it
-    float title_gap = title_size * 0.25f;          // extra space between letters
-    float title_y = WIN_H * 0.22f;               // keep your existing y values
-    float bar_y = WIN_H * 0.285f;
-
-    int title_len = 0;
-    while (title[title_len] != '\0') {
-        title_len++;
-    }
-
-    float title_w = title_len * title_size + (title_len - 1) * title_gap;
-    float char_x = window_center_x - title_w / 2.0f + title_size / 2.0f;   // centre of the first letter
-
-    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-
-    for (int i = 0; i < title_len; i++)
+    if (output == NULL || outputSize == 0)
     {
-        char one[2] = { title[i], '\0' };
-
-        DrawTextWithOutline(
-            one,
-            char_x,
-            title_y,
-            title_size,
-            CP_Color_Create(255, 255, 255, 255),     // fill (use your current colors)
-            CP_Color_Create(0, 0, 0, 255),           // outline
-            4.0f
-        );
-
-        char_x += title_size + title_gap;
+        return;
     }
 
-    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
-    CP_Graphics_DrawRect(window_center_x - title_w / 2.0f, bar_y, title_w, 8.0f);
-
-    // Rows
-    CP_Color row_text = CP_Color_Create(255, 220, 220, 255);
-
-    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_LEFT, CP_TEXT_ALIGN_V_MIDDLE);
-    float row_size = WIN_H * 0.03f;
-    CP_Settings_TextSize(row_size);
-
-    float icon_x = row_x + 20.0f;
-    float label_x = row_x + 60.0f;
-    float value_x = label_x + 13.0f * row_size;   // longest label is 12 characters + 1 space
-
-    float row1_y = WIN_H * 0.36f;
-    float row_gap = WIN_H * 0.095f;               // same gap between all three rows
-    float row2_y = row1_y + row_gap;
-    float row3_y = row1_y + row_gap * 2.0f;
-
-    int shownScore = (int)(score * (float)scoreMultiplier);
-
-    // High score
-    DrawDiamondIcon(icon_x, row1_y);
-    CP_Settings_Fill(row_text);
-    CP_Font_DrawText("HIGH SCORE:", label_x, row1_y);
-    sprintf_s(buf, sizeof(buf), "%03d,%03d", highScore / 1000, highScore % 1000);
-    CP_Font_DrawText(buf, value_x, row1_y);
-
-    if (shownScore > 0 && shownScore > highScoreAtStart)
+    if (value < 0)
     {
-        static float tag_timer = 0.0f;
-        tag_timer += CP_System_GetDt();
-
-        float pulse = 1.0f + 0.08f * sinf(tag_timer * 6.0f);     // gentle pulsing
-        float tag_size = row_size * 0.9f * pulse;
-
-        // centre of the 4-letter tag, just after the 7-character score value
-        float tag_x = value_x + 7.0f * row_size + row_size * 0.8f + 2.0f * tag_size;
-
-        CP_Settings_Translate(tag_x, row1_y);      // move the origin to the tag
-        CP_Settings_Rotate(-12.0f);                // tilt (degrees); use +12 to tilt the other way
-
-        CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-        DrawTextWithOutline(
-            "NEW!",
-            0.0f, 0.0f,                            // drawn at the new origin
-            tag_size,
-            CP_Color_Create(255, 220, 50, 255),    // yellow fill
-            CP_Color_Create(120, 20, 20, 255),     // dark red outline
-            2.0f
-        );
-
-        CP_Settings_ResetMatrix();                 // important: undo the move and tilt
-
-        CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_LEFT, CP_TEXT_ALIGN_V_MIDDLE);   // back for the next rows
-        CP_Settings_TextSize(row_size);
+        value = 0;
     }
 
-    // Final score
-    DrawDiamondIcon(icon_x, row2_y);
-    CP_Settings_Fill(row_text);
-    CP_Font_DrawText("FINAL SCORE:", label_x, row2_y);
-    sprintf_s(buf, sizeof(buf), "%03d,%03d", shownScore / 1000, shownScore % 1000);
-    CP_Font_DrawText(buf, value_x, row2_y);
+    snprintf(digits, sizeof(digits), "%d", value);
+    length = strlen(digits);
 
-    // Total coins
-    CP_Settings_Fill(CP_Color_Create(230, 150, 30, 255));
-    CP_Graphics_DrawCircle(icon_x, row3_y, 40.0f);
-    CP_Settings_Fill(CP_Color_Create(255, 200, 60, 255));
-    CP_Graphics_DrawCircle(icon_x, row3_y, 24.0f);
-    CP_Settings_Fill(row_text);
-    CP_Font_DrawText("TOTAL COINS:", label_x, row3_y);
-    sprintf_s(buf, sizeof(buf), "%03d,%03d", coinCount / 1000, coinCount % 1000);
-    CP_Font_DrawText(buf, value_x, row3_y);
+    for (size_t i = 0; i < length; i++)
+    {
+        if (i > 0 && (length - i) % 3 == 0)
+        {
+            if (written + 1 >= outputSize)
+            {
+                break;
+            }
+            output[written++] = ',';
+        }
 
-    // Divider
-    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
-    CP_Graphics_DrawRect(window_center_x - 380.0f, WIN_H * 0.63f, 760.0f, 4.0f);
+        if (written + 1 >= outputSize)
+        {
+            break;
+        }
+        output[written++] = digits[i];
+    }
 
-    // Buttons
-    DrawPillButtonAt(RESTART_X, BTN_Y, BTN_W, BTN_H, "RESTART (R)",
-        IsMouseInButton(RESTART_X, BTN_Y, BTN_W, BTN_H));
-    DrawPillButtonAt(EXIT_X, BTN_Y, BTN_W, BTN_H, "QUIT (Q)",
-        IsMouseInButton(EXIT_X, BTN_Y, BTN_W, BTN_H));
+    output[written] = '\0';
+}
 
-    //CP_Settings_StrokeWeight(1.0f);
+void DeathScreen_Draw(const char* title)
+{
+    char scoreText[64];
+    char multiplierText[32];
+    char finalScoreText[64];
+    char coinsText[64];
+
+    int baseScore = (int)score;
+    int finalScore = (int)(score * (float)scoreMultiplier);
+
+    bool isNewHighScore =
+        finalScore > 0 &&
+        finalScore > highScoreAtStart;
+
+    FormatDeathNumber(baseScore, scoreText, sizeof(scoreText));
+    FormatDeathNumber(finalScore, finalScoreText, sizeof(finalScoreText));
+    FormatDeathNumber(coinCount, coinsText, sizeof(coinsText));
+
+    snprintf(
+        multiplierText,
+        sizeof(multiplierText),
+        "x%d",
+        scoreMultiplier
+    );
+
+    if (pixel_font != NULL)
+    {
+        CP_Font_Set(pixel_font);
+    }
+
     CP_Settings_NoStroke();
     CP_Settings_RectMode(CP_POSITION_CORNER);
 
+    // Dark red tint over gameplay
+    CP_Settings_Fill(CP_Color_Create(40, 0, 0, 170));
+    CP_Graphics_DrawRect(0.0f, 0.0f, WIN_W, WIN_H);
+
+    // Main results panel
+    float boxW = WIN_W * 0.76f;
+    float boxH = WIN_H * 0.76f;
+    float boxX = window_center_x - boxW * 0.5f;
+    float boxY = WIN_H * 0.12f;
+
+    float scale = fminf(
+        WIN_W / 1280.0f,
+        WIN_H / 720.0f
+    );
+
+    float borderThickness = 6.0f * scale;
+
+    CP_Settings_Fill(CP_Color_Create(25, 5, 5, 215));
+    CP_Graphics_DrawRect(boxX, boxY, boxW, boxH);
+
+    CP_Settings_Fill(CP_Color_Create(180, 50, 50, 255));
+
+    CP_Graphics_DrawRect(
+        boxX,
+        boxY,
+        boxW,
+        borderThickness
+    );
+
+    CP_Graphics_DrawRect(
+        boxX,
+        boxY + boxH - borderThickness,
+        boxW,
+        borderThickness
+    );
+
+    CP_Graphics_DrawRect(
+        boxX,
+        boxY,
+        borderThickness,
+        boxH
+    );
+
+    CP_Graphics_DrawRect(
+        boxX + boxW - borderThickness,
+        boxY,
+        borderThickness,
+        boxH
+    );
+
+    // GAME OVER title
+    float titleSize = WIN_H * 0.065f;
+    float titleGap = titleSize * 0.18f;
+    float titleY = WIN_H * 0.205f;
+
+    int titleLength = (int)strlen(title);
+
+    float titleWidth =
+        (float)titleLength * titleSize +
+        (float)(titleLength > 0 ? titleLength - 1 : 0) * titleGap;
+
+    float characterX =
+        window_center_x -
+        titleWidth * 0.5f +
+        titleSize * 0.5f;
+
+    CP_Settings_TextAlignment(
+        CP_TEXT_ALIGN_H_CENTER,
+        CP_TEXT_ALIGN_V_MIDDLE
+    );
+
+    for (int i = 0; i < titleLength; i++)
+    {
+        char character[2] = { title[i], '\0' };
+
+        DrawTextWithOutline(
+            character,
+            characterX,
+            titleY,
+            titleSize,
+            CP_Color_Create(255, 255, 255, 255),
+            CP_Color_Create(0, 0, 0, 255),
+            4.0f * scale
+        );
+
+        characterX += titleSize + titleGap;
+    }
+
+    // title underline
+    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
+
+    CP_Graphics_DrawRect(
+        window_center_x - titleWidth * 0.5f,
+        WIN_H * 0.265f,
+        titleWidth,
+        6.0f * scale
+    );
+
+    /*
+     Four result rows:
+     SCORE
+     MULTIPLIER
+     FINAL SCORE
+     TOTAL COINS
+    */
+    float rowSize = WIN_H * 0.028f;
+    float rowGap = WIN_H * 0.082f;
+
+    float row1Y = WIN_H * 0.35f;
+    float row2Y = row1Y + rowGap;
+    float row3Y = row1Y + rowGap * 2.0f;
+    float row4Y = row1Y + rowGap * 3.0f;
+
+    // left-aligned X positions for the icon, label, and value in each row
+    float resultsLeft = window_center_x - 225.0f * scale;
+    float iconX = resultsLeft;
+    float labelX = resultsLeft + 32.0f * scale;
+    float valueX = resultsLeft + 310.0f * scale;
+
+    CP_Color rowColor = CP_Color_Create(255, 220, 220, 255);
+    CP_Color goldColor = CP_Color_Create(255, 220, 50, 255);
+
+    CP_Settings_TextAlignment(
+        CP_TEXT_ALIGN_H_LEFT,
+        CP_TEXT_ALIGN_V_MIDDLE
+    );
+
+    CP_Settings_TextSize(rowSize);
+
+    // row 1: base score before the multiplier
+    DrawDiamondIcon(iconX, row1Y);
+
+    CP_Settings_Fill(rowColor);
+    CP_Font_DrawText("SCORE:", labelX, row1Y);
+    CP_Font_DrawText(scoreText, valueX, row1Y);
+
+    // If the player achieved a new high score, display a pulsing "NEW HIGH SCORE!" message above the results.
+    if (isNewHighScore)
+    {
+        float pulse =
+            1.0f +
+            0.08f * sinf(CP_System_GetSeconds() * 6.0f);
+
+        float tagSize = rowSize * 0.9f * pulse;
+
+        // Calculate the width of the score text to position the "NEW!" tag correctly.
+        float scoreWidth =
+            (float)strlen(scoreText) * rowSize;
+
+        float tagX =
+            valueX +
+            scoreWidth +
+            12.0f * scale +
+            2.0f * tagSize;
+
+        CP_Settings_Translate(tagX, row1Y);
+        CP_Settings_Rotate(-12.0f);
+
+        CP_Settings_TextAlignment(
+            CP_TEXT_ALIGN_H_CENTER,
+            CP_TEXT_ALIGN_V_MIDDLE
+        );
+
+        DrawTextWithOutline(
+            "NEW!",
+            0.0f,
+            0.0f,
+            tagSize,
+            CP_Color_Create(255, 220, 50, 255),
+            CP_Color_Create(120, 20, 20, 255),
+            2.0f * scale
+        );
+
+        CP_Settings_ResetMatrix();
+
+        /* Restore text settings for the remaining result rows. */
+        CP_Settings_TextAlignment(
+            CP_TEXT_ALIGN_H_LEFT,
+            CP_TEXT_ALIGN_V_MIDDLE
+        );
+
+        CP_Settings_TextSize(rowSize);
+    }
+
+    // row 2: accumulated score multiplier
+    DrawDiamondIcon(iconX, row2Y);
+
+    CP_Settings_Fill(rowColor);
+    CP_Font_DrawText("MULTIPLIER:", labelX, row2Y);
+
+    CP_Settings_Fill(goldColor);
+    CP_Font_DrawText(multiplierText, valueX, row2Y);
+
+    // row 3: score after applying the multiplier
+    DrawDiamondIcon(iconX, row3Y);
+
+    CP_Settings_Fill(rowColor);
+    CP_Font_DrawText("FINAL SCORE:", labelX, row3Y);
+
+    CP_Settings_Fill(goldColor);
+    CP_Font_DrawText(finalScoreText, valueX, row3Y);
+
+    // row 4: total coins collected
+    CP_Settings_NoStroke();
+
+    CP_Settings_Fill(CP_Color_Create(230, 150, 30, 255));
+    CP_Graphics_DrawCircle(
+        iconX,
+        row4Y,
+        32.0f * scale
+    );
+
+    CP_Settings_Fill(CP_Color_Create(255, 200, 60, 255));
+    CP_Graphics_DrawCircle(
+        iconX,
+        row4Y,
+        20.0f * scale
+    );
+
+    CP_Settings_Fill(rowColor);
+    CP_Font_DrawText("TOTAL COINS:", labelX, row4Y);
+    CP_Font_DrawText(coinsText, valueX, row4Y);
+
+    // divider line between the results and the buttons
+    CP_Settings_RectMode(CP_POSITION_CORNER);
+    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
+
+    CP_Graphics_DrawRect(
+        boxX + boxW * 0.08f,
+        WIN_H * 0.655f,
+        boxW * 0.84f,
+        4.0f * scale
+    );
+
+    DrawPillButtonAt(
+        RESTART_X,
+        BTN_Y,
+        BTN_W,
+        BTN_H,
+        "RESTART (R)",
+        GameMouseInButton(RESTART_X, BTN_Y, BTN_W, BTN_H)
+    );
+
+    DrawPillButtonAt(
+        EXIT_X,
+        BTN_Y,
+        BTN_W,
+        BTN_H,
+        "QUIT (Q)",
+        GameMouseInButton(EXIT_X, BTN_Y, BTN_W, BTN_H)
+    );
+
+    CP_Settings_NoStroke();
+    CP_Settings_RectMode(CP_POSITION_CORNER);
 }
+
 ///* ============================================================
 //   Draw Pause Button
 //   ============================================================ */
 void DrawPauseButton(void)
 {
-    int hovered = IsMouseInButton(pause_button_x, pause_button_y, pause_button_size, pause_button_size);
-    DrawPillButtonAt(pause_button_x, pause_button_y, pause_button_size, pause_button_size, "", hovered);
+    float s = HUD_SCALE;
+
+    int hovered = GameMouseInButton(pause_button_x, pause_button_y, pause_button_size, pause_button_size);
+    DrawHUDPanel(pause_button_x, pause_button_y, pause_button_size, pause_button_size, hovered);
 
     CP_Settings_RectMode(CP_POSITION_CENTER);
-    CP_Settings_Fill(CP_Color_Create(255, 230, 230, 255));
-    CP_Graphics_DrawRect(pause_button_x - 9.0f, pause_button_y, 9.0f, 28.0f);   // left bar
-    CP_Graphics_DrawRect(pause_button_x + 9.0f, pause_button_y, 9.0f, 28.0f);   // right bar
+    CP_Settings_NoStroke();
+
+    // Change the color of the pause button when hovered
+    CP_Settings_Fill(
+        hovered
+        ? CP_Color_Create(255, 225, 100, 255)
+        : CP_Color_Create(235, 235, 240, 255)
+    );
+
+    // Draw the two vertical bars of the pause icon
+    CP_Graphics_DrawRect(pause_button_x - 9.0f * s, pause_button_y, 7.0f * s, 30.0f * s);
+    CP_Graphics_DrawRect(pause_button_x + 9.0f * s, pause_button_y, 7.0f * s, 30.0f * s);
     CP_Settings_RectMode(CP_POSITION_CORNER);
 }
 /* ============================================================
@@ -2186,28 +2993,43 @@ void PauseMenu_Draw(void)
     CP_Font_DrawText("PAUSED", window_center_x, WIN_H * 0.28f);
 
     DrawPillButtonAt(window_center_x, pause_resume_y, PAUSE_BTN_W, BTN_H, "RESUME (SPACE)",
-        IsMouseInButton(window_center_x, pause_resume_y, PAUSE_BTN_W, BTN_H));
+        GameMouseInButton(window_center_x, pause_resume_y, PAUSE_BTN_W, BTN_H));
     DrawPillButtonAt(window_center_x, pause_quit_y, PAUSE_BTN_W, BTN_H, "QUIT (Q)",
-        IsMouseInButton(window_center_x, pause_quit_y, PAUSE_BTN_W, BTN_H));
+        GameMouseInButton(window_center_x, pause_quit_y, PAUSE_BTN_W, BTN_H));
 }
 
 /* ============================================================
-    Draw Hearts
+    Draw Hearts [ADDED BY LEKKAR]
    ============================================================ */
-void Draw_Hearts(void) {
-    if (heart_full == NULL) return;
-    for (int i = 0; i < max_lives; i++) {
-        float x = hearts_center_x + i * heart_spacing;
-        float y = hearts_center_y;
-        if (i < lives) {
-            CP_Image_Draw(heart_full, x, y, heart_draw_size, heart_draw_size, 255);
-        }
-        else {
-            CP_Image_Draw(heart_full, x, y, heart_draw_size, heart_draw_size, 60);
+void Draw_Hearts(void)
+{
+    // draw a panel behind the hearts to make them more visible against the background
+    float s = HUD_SCALE;
+    float x = 382.0f * s;
+    float y = 48.0f * s;
+    DrawHUDPanel(x, y, 180.0f * s, 60.0f * s, 0);
+
+    CP_Settings_ImageMode(CP_POSITION_CENTER); // draw hearts from their centre
+
+    if (heart_full != NULL) // draw the hearts only if the image loaded successfully
+    {
+        float heartSize = 44.0f * s;
+        float spacing = 52.0f * s;
+
+        float firstX =
+            x - ((float)(max_lives - 1) * spacing) * 0.5f;
+
+        for (int i = 0; i < max_lives; i++)
+        {
+            CP_Image_Draw(heart_full, firstX + (float)i * spacing, y, heartSize, heartSize, i < lives ? 255 : 60
+            );
         }
     }
 
+    CP_Settings_NoStroke();
+    CP_Settings_RectMode(CP_POSITION_CORNER);
 }
+
 /* Pause or resume the game and its music. */
 void SetPaused(int paused)
 {
@@ -2217,12 +3039,14 @@ void SetPaused(int paused)
     else        CP_Sound_ResumeGroup(CP_SOUND_GROUP_MUSIC);
 }
 
+
 /* ============================================================
    Update
    ============================================================ */
 
 void Game_Update(void)
 {
+    CP_Settings_ResetMatrix();
     float dt = CP_System_GetDt();
 
     if (CP_Input_KeyTriggered(KEY_Q))
@@ -2252,17 +3076,17 @@ void Game_Update(void)
         else if (CP_Input_MouseTriggered(MOUSE_BUTTON_1))
         {
             if (!is_paused &&
-                IsMouseInButton(pause_button_x, pause_button_y, pause_button_size, pause_button_size))
+                GameMouseInButton(pause_button_x, pause_button_y, pause_button_size, pause_button_size))
             {
                 SetPaused(1);
             }
             else if (is_paused)
             {
-                if (IsMouseInButton(window_center_x, pause_resume_y, PAUSE_BTN_W, BTN_H))
+                if (GameMouseInButton(window_center_x, pause_resume_y, PAUSE_BTN_W, BTN_H))
                 {
                     SetPaused(0);
                 }
-                else if (IsMouseInButton(window_center_x, pause_quit_y, PAUSE_BTN_W, BTN_H))
+                else if (GameMouseInButton(window_center_x, pause_quit_y, PAUSE_BTN_W, BTN_H))
                 {
                     CP_Engine_SetNextGameStateForced(
                         Main_Menu_Init, Main_Menu_Update, Main_Menu_Exit);
@@ -2279,6 +3103,8 @@ void Game_Update(void)
     }
     else if (state == STATE_PLAYING)
     {
+        runSurvivalSeconds += dt;  // excludes pause time and death animations.
+
         /* Switching lanes. */
         if (CP_Input_KeyTriggered(KEY_W) && lane > 0)
         {
@@ -2394,6 +3220,9 @@ void Game_Update(void)
             invincibleTimer = fmaxf(0.0f, invincibleTimer - dt);
             shieldTimer = fmaxf(0.0f, shieldTimer - dt);
             magnetTimer = fmaxf(0.0f, magnetTimer - dt);
+
+            if (reviveAnimTimer > 0.0f)
+                reviveAnimTimer -= dt;
 
             Anim_Update(&coinAnim);
             Anim_Update(&boxAnim);
@@ -2522,6 +3351,46 @@ void Game_Update(void)
                 }
             }
 
+            // [ADDED BY LEKKAR] heart pickup: update position, check for collection, and respawn if missing
+            if (heart_active)
+            {
+                heart_x -= worldMove;
+
+                if (heart_lane == lane &&
+                    fabsf(heart_x - player_x) < HEART_PICKUP_DIST * gameScale)
+                {
+                    if (lives < max_lives)
+                    {
+                        lives++;
+                    }
+
+                    heart_active = false;
+                    reviveAnimTimer = 1.5f; // show angel pin for 1.5 seconds!
+
+                    if (sndHeart != NULL)
+                    {
+                        CP_Sound_PlayAdvanced(sndHeart, HEART_VOL, 1.0f, false, CP_SOUND_GROUP_SFX);
+                    }
+                    else if (sndCoin != NULL)
+                    {
+                        CP_Sound_PlayAdvanced(sndCoin, COIN_VOL, 1.0f, false, CP_SOUND_GROUP_SFX);
+                    }
+                }
+                else if (heart_x < -100.0f * gameScale)
+                {
+                    heart_active = false;
+                }
+            }
+            else if (lives < max_lives)
+            {
+                heartSpawnTimer -= dt;
+
+                if (heartSpawnTimer <= 0.0f)
+                {
+                    TrySpawnHeart();
+                }
+            }
+
             if (multiFx.sheet != NULL)
             {
                 Anim_Update(&multiFx);
@@ -2560,6 +3429,13 @@ void Game_Update(void)
             }
         }
 
+        // follow the player's lane while remaining halfway off-screen.
+        if (state == STATE_PLAYING)
+        {
+            enemyX = 0.0f;
+            enemyGround = PinFeetY(lane);
+        }
+
         Anim_Update(&runAnim);
         Anim_Update(&chaseAnim);
 
@@ -2579,36 +3455,29 @@ void Game_Update(void)
     }
     else if (state == STATE_ENEMY_WALK)
     {
-        Anim_Update(&chaseAnim);
-
-        float targetX = player_x - GRAB_REACH * gameScale;
-        float targetY = PinFeetY(lane);
-
-        float dx = targetX - enemyX;
-        float dy = targetY - enemyGround;
-
-        float dist = sqrtf(dx * dx + dy * dy);
-        //float step = ENEMY_WALK_SPEED * dt;
-        float step = ENEMY_WALK_SPEED * gameScale * dt;
-
-        if (dist <= step)
-        {
-            enemyX = targetX;
-            enemyGround = targetY;
-
-            state = STATE_GRAB;
-
-            Anim_Reset(&grabAnim);
-        }
-        else
-        {
-            enemyX += dx / dist * step;
-            enemyGround += dy / dist * step;
-        }
+        state = STATE_GRAB;
+        Anim_Reset(&grabAnim);
     }
     else
     {
         Anim_Update(&grabAnim);
+    }
+
+    if (runResultReady)
+    {
+        if (!telemetryEnabled)
+        {
+            runResultReady = false;
+        }
+        else if (Telemetry_SubmitRun(
+            (int)score,
+            runSurvivalSeconds,
+            coinCount,
+            runDeathCause))
+        {
+            /* The upload worker accepted this run. */
+            runResultReady = false;
+        }
     }
 
     Draw_World();
@@ -2619,19 +3488,19 @@ void Game_Update(void)
         RageOverlay_Draw();
     }
 
-    bool grabDone =
-        state == STATE_GRAB &&
-        grabAnim.currentFrame == grabAnim.frameCount - 1;
-
-    bool dyingDone =
-        state == STATE_DYING &&
+    bool grabDone = (state == STATE_GRAB &&
+        grabAnim.currentFrame >= grabAnim.frameCount - 1);
+    bool dyingDone = (state == STATE_DYING &&
         activeDeathAnim != NULL &&
-        activeDeathAnim->currentFrame == activeDeathAnim->frameCount - 1;
+        activeDeathAnim->currentFrame >= activeDeathAnim->frameCount - 1);
 
     if (grabDone || dyingDone)
     {
-        //Draw_DeathScreen();
-        show_death_screen = 1;
+        deathHoldTimer += dt;
+        if (deathHoldTimer >= 0.45f)
+        {
+            show_death_screen = 1;
+        }
     }
 
     /* ---------- Death screen input ---------- */
@@ -2645,12 +3514,12 @@ void Game_Update(void)
 
         if (CP_Input_MouseTriggered(MOUSE_BUTTON_1))
         {
-            if (IsMouseInButton(RESTART_X, BTN_Y, BTN_W, BTN_H))
+            if (GameMouseInButton(RESTART_X, BTN_Y, BTN_W, BTN_H))
             {
                 CP_Engine_SetNextGameStateForced(Game_Init, Game_Update, Game_Exit);
                 return;
             }
-            else if (IsMouseInButton(EXIT_X, BTN_Y, BTN_W, BTN_H))
+            else if (GameMouseInButton(EXIT_X, BTN_Y, BTN_W, BTN_H))
             {
                 CP_Engine_SetNextGameStateForced(
                     Main_Menu_Init, Main_Menu_Update, Main_Menu_Exit);
@@ -2715,6 +3584,25 @@ void Game_Exit(void)
     {
         CP_Image_Free(bgImage);
         bgImage = NULL;
+    }
+
+    // [ADDED BY LEKKAR] Free heart pickup resources
+    if (heartPickupImg != NULL)
+    {
+        CP_Image_Free(heartPickupImg);
+        heartPickupImg = NULL;
+    }
+
+    if (multiplierItemImg != NULL)
+    {
+        CP_Image_Free(multiplierItemImg);
+        multiplierItemImg = NULL;
+    }
+
+    if (sndHeart != NULL)
+    {
+        CP_Sound_Free(sndHeart);
+        sndHeart = NULL;
     }
 
     if (runAnim.sheet != NULL)
@@ -2788,6 +3676,18 @@ void Game_Exit(void)
     {
         CP_Image_Free(heart_full);
         heart_full = NULL;
+    }
+
+    if (hudCoinImage != NULL)
+    {
+        CP_Image_Free(hudCoinImage);
+        hudCoinImage = NULL;
+    }
+
+    if (reviveAnim.sheet != NULL)
+    {
+        CP_Image_Free(reviveAnim.sheet);
+        reviveAnim.sheet = NULL;
     }
 
     rageEventActive = false;
