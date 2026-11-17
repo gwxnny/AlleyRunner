@@ -1,7 +1,6 @@
-﻿  game.c
-  main.c
-  mainmenu.c
-  telemetry.c
-  utils.c
+﻿  main.c
+  splash.c
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\splash.c(143,27): warning C4047: 'function': 'CP_Image' differs in levels of indirection from 'CP_Image *'
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\splash.c(143,27): warning C4024: 'CP_Image_Free': different types for formal and actual parameter 1
   Generating Code...
   AlleyRunner.vcxproj -> C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\x64\Debug\AlleyRunner.exe
