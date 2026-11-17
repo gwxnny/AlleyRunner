@@ -14,5 +14,3 @@
 *.iobj
 *.ipdb
 bin
-Debug
-Release
