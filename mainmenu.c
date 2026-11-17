@@ -39,7 +39,7 @@ static int pendingButtonAction = 0; // 0 = none, 1 = play, 2 = exit
 // audio settings are initialized once when the main menu is first loaded.
 static bool audioSettingsInitialized = false;
 static float musicVolume = 0.2f; // default music volume (0.0 to 1.0)
-static float sfxVolume = 1.0f; // default sound effects volume (0.0 to 1.0)
+static float sfxVolume = 0.2f; // default sound effects volume (0.0 to 1.0)
 
 // 0 = not dragging, 1 = music, 2 = SFX.
 static int activeVolumeSlider = 0;
@@ -1363,7 +1363,7 @@ void Main_Menu_Init(void)
     // initialize audio settings only once when the main menu is first loaded.
     if (!audioSettingsInitialized) {
         musicVolume = 0.2f;
-        sfxVolume = 1.0f;
+        sfxVolume = 0.2f;
         audioSettingsInitialized = true;
     }
 
@@ -1371,12 +1371,12 @@ void Main_Menu_Init(void)
 
     // button click sound effect.
     buttonSound = CP_Sound_Load(
-        "../Assets/main_menu_btn_sound.mp3"
+        "Assets/main_menu_btn_sound.mp3"
     );
 
     // main menu music.
     menuMusic = CP_Sound_Load(
-        "../Assets/main_menu_bg_music.mp3"
+        "Assets/main_menu_bg_music.mp3"
     );
 
     if (menuMusic != NULL) {
@@ -1402,7 +1402,7 @@ void Main_Menu_Init(void)
 
     if (!fontTitle) {
         fontTitle = CP_Font_Load(
-            "../Assets/PressStart2P-Regular.ttf"
+            "Assets/PressStart2P-Regular.ttf"
         );
     }
 
@@ -1414,7 +1414,7 @@ void Main_Menu_Init(void)
     }
 
     if (!fontBody) {
-        fontBody = CP_Font_Load("../Assets/VT323-Regular.ttf");
+        fontBody = CP_Font_Load("Assets/VT323-Regular.ttf");
     }
 
     // background.
@@ -1430,7 +1430,7 @@ void Main_Menu_Init(void)
 
     if (!bgImage) {
         bgImage = CP_Image_Load(
-            "../Assets/mainmenu_background.png"
+            "Assets/mainmenu_background.png"
         );
     }
 
@@ -1448,7 +1448,7 @@ void Main_Menu_Init(void)
     if (menuPin == NULL)
     {
         menuPin = CP_Image_Load(
-            "../Assets/running_pin_spiderman.PNG"
+            "Assets/running_pin_spiderman.PNG"
         );
     }
 
@@ -1459,7 +1459,7 @@ void Main_Menu_Init(void)
     if (menuBall == NULL)
     {
         menuBall = CP_Image_Load(
-            "../Assets/venom_bowling_ball_chasing.png"
+            "Assets/venom_bowling_ball_chasing.png"
         );
     }
 
