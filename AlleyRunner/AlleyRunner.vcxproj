@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClInclude Include="..\game.h" />
     <ClInclude Include="..\mainmenu.h" />
+    <ClInclude Include="..\splash.h" />
     <ClInclude Include="..\telemetry.h" />
     <ClInclude Include="..\utils.h" />
   </ItemGroup>
@@ -28,6 +29,7 @@
     <ClCompile Include="..\game.c" />
     <ClCompile Include="..\main.c" />
     <ClCompile Include="..\mainmenu.c" />
+    <ClCompile Include="..\splash.c" />
     <ClCompile Include="..\telemetry.c" />
     <ClCompile Include="..\utils.c" />
   </ItemGroup>
