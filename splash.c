@@ -3,15 +3,18 @@
 #include "mainmenu.h"
 #include <stdio.h>
 
-#define SPLASH_COUNT 1
+#define SPLASH_COUNT 2
 
 /* Total duration per logo, including both fades. */
 #define SPLASH_HOLD_TIME  3.0f
 #define SPLASH_FADE_TIME  0.75f
 
+
 static const char* splashPaths[SPLASH_COUNT] =
 {
-    "Assets/DigiPen_Singapore_WEB_WHITE.png"
+    "Assets/DigiPen Singapore Splash Screen.png",
+    "Assets/team_logo.png"
+
 };
 
 static CP_Image logos[SPLASH_COUNT] = { NULL };
@@ -108,8 +111,10 @@ void Splash_Update(void)
             float windowH =
                 (float)CP_System_GetWindowHeight();
 
-            float maxW = windowW * 0.70f;
-            float maxH = windowH * 0.60f;
+            float logoScale = (current == 0) ? 1.0f : 0.65f;
+
+            float maxW = windowW * logoScale;
+            float maxH = windowH * 0.85f;
 
             float scaleX = maxW / imageW;
             float scaleY = maxH / imageH;
@@ -140,7 +145,7 @@ void Splash_Exit(void)
     {
         if (logos[i] != NULL)
         {
-            CP_Image_Free(&logos[i]);
+            CP_Image_Free(logos[i]);
             logos[i] = NULL;
         }
     }

@@ -1,11 +1,6 @@
 ﻿  game.c
-  main.c
-  mainmenu.c
   splash.c
-  telemetry.c
-C:\Users\isaac\Documents\GitHub\AlleyRunner\splash.c(143,27): warning C4047: 'function': 'CP_Image' differs in levels of indirection from 'CP_Image *'
-C:\Users\isaac\Documents\GitHub\AlleyRunner\splash.c(143,27): warning C4024: 'CP_Image_Free': different types for formal and actual parameter 1
-  utils.c
+C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(3661,23): warning C4047: 'function': 'CP_Image' differs in levels of indirection from 'CP_Image *'
+C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(3661,23): warning C4024: 'CP_Image_Free': different types for formal and actual parameter 1
   Generating Code...
-  LINK : C:\Users\isaac\Documents\GitHub\AlleyRunner\x64\Debug\AlleyRunner.exe not found or not built by the last incremental link; performing full link
   AlleyRunner.vcxproj -> C:\Users\isaac\Documents\GitHub\AlleyRunner\x64\Debug\AlleyRunner.exe
