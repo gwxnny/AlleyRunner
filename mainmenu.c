@@ -101,8 +101,14 @@ static Button btnHowTo;
 static Button btnOptions;
 static Button btnExit;
 
+// credits modal state.
+static Button btnCredits;
+static bool showCredits = false;
+static CP_Image creditsLogo = NULL;
+
 static bool showHowToModal = false;
 static bool showOptionsModal = false;
+static bool showQuitConfirm = false;
 
 static float floatTimer = 0.0f;
 
@@ -121,12 +127,6 @@ static int windowedWidth = 1280;
 static int windowedHeight = 720;
 
 static bool displaySettingsInitialized = false;
-
-/* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
-
-    Button helpers
-
-*/ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
 /*! Specification for function IsMouseOverButton:
 @brief Checks whether the mouse is inside a button.
@@ -179,10 +179,7 @@ static void GetUIMouse(float* x, float* y)
     }
 }
 
-static bool IsMouseOverButton(
-    Button btn,
-    float mouseX,
-    float mouseY)
+static bool IsMouseOverButton(Button btn, float mouseX, float mouseY)
 {
     float halfWidth = btn.width / 2.0f;
     float halfHeight = btn.height / 2.0f;
@@ -275,13 +272,6 @@ static void DrawPillButton(Button btn)
     CP_Font_DrawText(btn.label, btn.x, btn.y);
 }
 
-
-/* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
-
-    Text helpers
-
-*/ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
-
 /*! Specification for function DrawTextWithOutline:
 @brief Draws text with an outline around it.
 
@@ -296,14 +286,7 @@ The outline is made by drawing copies of the text around its position.
 @param outlineWidth - The distance between the text and its outline copies.
 @return none.
 *//*________________________________________________________________________________*/
-static void DrawTextWithOutline(
-    const char* text,
-    float x,
-    float y,
-    float size,
-    CP_Color fillColor,
-    CP_Color strokeColor,
-    float outlineWidth)
+static void DrawTextWithOutline(const char* text, float x, float y, float size, CP_Color fillColor, CP_Color strokeColor, float outlineWidth)
 {
     CP_Settings_TextSize(size);
     CP_Settings_Fill(strokeColor);
@@ -328,12 +311,6 @@ static void DrawTextWithOutline(
     CP_Font_DrawText(text, x, y);
 }
 
-/* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
-
-    Layout
-
-*/ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
-
 /*! Specification for function UpdateMenuButtonLayout:
 @brief Sets the positions and sizes of the main menu buttons.
 
@@ -346,7 +323,7 @@ The buttons are arranged vertically in the centre of the window.
 static void UpdateMenuButtonLayout(float windowW, float windowH)
 {
     float centerX = windowW / 2.0f;
-    float startY = windowH * 0.48f;
+    float startY = windowH * 0.43f;
 
     // change values to resize the menu buttons.
     float contentScale = MenuContentScale();
@@ -377,26 +354,20 @@ static void UpdateMenuButtonLayout(float windowW, float windowH)
         startY + spacing * 2.0f,
         btnWidth,
         btnHeight,
-        "OPTIONS",
+        "SETTINGS",
         false
+    };
+
+    btnCredits = (Button){
+    centerX, startY + spacing * 3.0f,
+    btnWidth, btnHeight, "CREDITS", false
     };
 
     btnExit = (Button){
-        centerX,
-        startY + spacing * 3.0f,
-        btnWidth,
-        btnHeight,
-        "EXIT",
-        false
+        centerX, startY + spacing * 4.0f,
+        btnWidth, btnHeight, "QUIT", false
     };
 }
-
-
-/* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
-
-    Audio options
-
-*/ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
 /*! Specification for function ApplyAudioVolumes:
 @brief Applies the current music and sound effect volume settings.
@@ -429,12 +400,7 @@ This function only draws the slider. It does not handle mouse input.
 @param value - The volume level, from 0.0 to 1.0.
 @return none.
 *//*________________________________________________________________________________*/
-static void DrawVolumeSlider(
-    const char* label,
-    float left,
-    float y,
-    float width,
-    float value)
+static void DrawVolumeSlider(const char* label, float left, float y, float width, float value)
 {
     float uiScale = MenuContentScale();
     char text[80];
@@ -531,7 +497,7 @@ static void ApplyDisplayMode(DisplayMode nextMode)
         return;
     }
 
-    /* Remember the current windowed canvas size. */
+    // remember the current windowed canvas size.
     if (displayMode == DISPLAY_WINDOWED)
     {
         windowedWidth = CP_System_GetWindowWidth();
@@ -673,6 +639,84 @@ static void ApplyDisplayMode(DisplayMode nextMode)
     displayMode = nextMode;
 }
 
+/*! Specification for function DrawQuitConfirmModal:
+@brief Draws the quit confirmation popup and handles its controls.
+
+Allows the player to confirm or cancel quitting the game using the Yes and No buttons,
+or the Escape key.
+
+@param centerX - The horizontal centre of the popup.
+@param centerY - The vertical centre of the popup.
+@param windowW - The window width.
+@param windowH - The window height.
+@return none.
+*//*________________________________________________________________________________*/
+static void DrawQuitConfirmModal(float centerX, float centerY, float windowW, float windowH)
+{
+    float scale = MenuUIScale();
+    float mouseX, mouseY;
+    GetUIMouse(&mouseX, &mouseY);
+
+    Button yesButton = {
+        centerX - 100.0f * scale, centerY + 48.0f * scale,
+        160.0f * scale, 52.0f * scale, "YES", false
+    };
+
+    Button noButton = {
+        centerX + 100.0f * scale, centerY + 48.0f * scale,
+        160.0f * scale, 52.0f * scale, "NO", false
+    };
+
+    // Once Yes is clicked, wait for the existing exit timer.
+    if (pendingButtonAction == 0)
+    {
+        yesButton.isHovered = IsMouseOverButton(yesButton, mouseX, mouseY);
+        noButton.isHovered = IsMouseOverButton(noButton, mouseX, mouseY);
+    }
+
+    CP_Settings_RectMode(CP_POSITION_CENTER);
+    CP_Settings_NoStroke();
+    CP_Settings_Fill(CP_Color_Create(0, 0, 0, 180));
+    CP_Graphics_DrawRect(centerX, centerY, windowW, windowH);
+
+    CP_Settings_Fill(CP_Color_Create(20, 20, 25, 250));
+    CP_Settings_Stroke(CP_Color_Create(225, 75, 95, 255));
+    CP_Settings_StrokeWeight(4.0f * scale);
+    CP_Graphics_DrawRectAdvanced(
+        centerX, centerY, 500.0f * scale, 200.0f * scale,
+        0.0f, 15.0f * scale
+    );
+
+    CP_Settings_NoStroke();
+    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
+    if (fontBody != NULL)
+        CP_Font_Set(fontBody);
+
+    CP_Settings_TextSize(32.0f * scale);
+    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
+    CP_Font_DrawText("Quit Alley Runner?", centerX, centerY - 38.0f * scale);
+
+    DrawPillButton(yesButton);
+    DrawPillButton(noButton);
+
+    if (pendingButtonAction != 0)
+        return;
+
+    bool clicked = CP_Input_MouseTriggered(MOUSE_BUTTON_LEFT);
+
+    if (CP_Input_KeyTriggered(KEY_ESCAPE) || (clicked && noButton.isHovered))
+    {
+        PlayMenuClick();
+        showQuitConfirm = false;
+    }
+    else if (clicked && yesButton.isHovered)
+    {
+        PlayMenuClick();
+        pendingButtonAction = 2;
+        buttonActionTimer = 0.25f;
+    }
+}
+
 /*! Specification for function DrawOptionsModal:
 @brief Draws the options popup and handles its controls.
 
@@ -685,11 +729,7 @@ and close the popup using the Back button or Escape key.
 @param windowH - The window height.
 @return none.
 *//*________________________________________________________________________________*/
-static void DrawOptionsModal(
-    float centerX,
-    float centerY,
-    float windowW,
-    float windowH)
+static void DrawOptionsModal(float centerX, float centerY, float windowW, float windowH)
 {
     float uiScale = MenuUIScale();
     float mouseX, mouseY;
@@ -888,13 +928,6 @@ static void DrawOptionsModal(
     }
 }
 
-
-/* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
-
-    How to play
-
-*/ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
-
 /*! Specification for function DrawHowToModal:
 @brief Draws the How to Play popup.
 
@@ -907,17 +940,13 @@ clicks anywhere or presses Escape.
 @param windowH - The window height.
 @return none.
 *//*________________________________________________________________________________*/
-static void DrawHowToModal(
-    float centerX,
-    float centerY,
-    float windowW,
-    float windowH)
+static void DrawHowToModal(float centerX, float centerY, float windowW, float windowH)
 {
     if (windowW <= 0.0f || windowH <= 0.0f) {
         return;
     }
 
-    // Scale the layout from a 1280 x 720 reference window.
+    // scale the layout from a 1280 x 720 reference window.
     float scaleX = windowW / 1280.0f;
     float scaleY = windowH / 720.0f;
     float scale = (scaleX < scaleY) ? scaleX : scaleY;
@@ -953,7 +982,7 @@ static void DrawHowToModal(
         windowH
     );
 
-    // Main panel.
+    // main panel.
     CP_Settings_Fill(CP_Color_Create(20, 20, 25, 250));
     CP_Settings_Stroke(pink);
     CP_Settings_StrokeWeight(4.0f * scale);
@@ -969,7 +998,7 @@ static void DrawHowToModal(
 
     CP_Settings_NoStroke();
 
-    // Title.
+    // title.
     CP_Settings_TextAlignment(
         CP_TEXT_ALIGN_H_CENTER,
         CP_TEXT_ALIGN_V_MIDDLE
@@ -1004,7 +1033,7 @@ static void DrawHowToModal(
         panelTop + 87.0f * scale
     );
 
-    // Horizontal and vertical dividers.
+    // horizontal and vertical dividers.
     CP_Settings_Fill(CP_Color_Create(225, 75, 95, 110));
 
     CP_Graphics_DrawRect(
@@ -1026,7 +1055,7 @@ static void DrawHowToModal(
         CP_TEXT_ALIGN_V_MIDDLE
     );
 
-    // Left column: objective.
+    // left column: objective.
     CP_Settings_TextSize(29.0f * scale);
     CP_Settings_Fill(pink);
     CP_Font_DrawText(
@@ -1053,7 +1082,7 @@ static void DrawHowToModal(
         panelTop + 243.0f * scale
     );
 
-    // Left column: controls.
+    // left column: controls.
     CP_Settings_TextSize(29.0f * scale);
     CP_Settings_Fill(pink);
     CP_Font_DrawText(
@@ -1075,7 +1104,7 @@ static void DrawHowToModal(
         panelTop + 355.0f * scale
     );
 
-    // Left column: health and hazards.
+    // left column: health and hazards.
     CP_Settings_TextSize(29.0f * scale);
     CP_Settings_Fill(pink);
     CP_Font_DrawText(
@@ -1102,7 +1131,7 @@ static void DrawHowToModal(
         panelTop + 497.0f * scale
     );
 
-    // Right column: mystery boxes.
+    // right column: mystery boxes.
     CP_Settings_TextSize(29.0f * scale);
     CP_Settings_Fill(pink);
     CP_Font_DrawText(
@@ -1124,7 +1153,7 @@ static void DrawHowToModal(
         panelTop + 213.0f * scale
     );
 
-    // Right column: invincibility.
+    // right column: invincibility.
     CP_Settings_TextSize(27.0f * scale);
     CP_Settings_Fill(gold);
     CP_Font_DrawText(
@@ -1141,7 +1170,7 @@ static void DrawHowToModal(
         panelTop + 293.0f * scale
     );
 
-    // Right column: shield.
+    // right column: shield.
     CP_Settings_TextSize(27.0f * scale);
     CP_Settings_Fill(blue);
     CP_Font_DrawText(
@@ -1158,7 +1187,7 @@ static void DrawHowToModal(
         panelTop + 373.0f * scale
     );
 
-    // Right column: magnet.
+    // right column: magnet.
     CP_Settings_TextSize(27.0f * scale);
     CP_Settings_Fill(purple);
     CP_Font_DrawText(
@@ -1182,7 +1211,7 @@ static void DrawHowToModal(
         panelTop + 497.0f * scale
     );
 
-    // Footer.
+    // footer.
     CP_Settings_TextAlignment(
         CP_TEXT_ALIGN_H_CENTER,
         CP_TEXT_ALIGN_V_MIDDLE
@@ -1204,7 +1233,7 @@ static void DrawHowToModal(
         panelTop + 580.0f * scale
     );
 
-    // Close the popup.
+    // close the popup.
     if (
         CP_Input_MouseTriggered(MOUSE_BUTTON_LEFT) ||
         CP_Input_KeyTriggered(KEY_ESCAPE)
@@ -1228,10 +1257,7 @@ frames. Restarts the chase after both characters leave the screen.
 @param windowH - The window height.
 @return none.
 *//*________________________________________________________________________________*/
-static void DrawMenuChase(
-    float dt,
-    float windowW,
-    float windowH)
+static void DrawMenuChase(float dt, float windowW, float windowH)
 {
     float menuScale = windowH / 720.0f;
 
@@ -1322,11 +1348,152 @@ static void DrawMenuChase(
     }
 }
 
-/* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
+/*! Specification for function DrawCreditsScreen:
+@brief Prepares the credits screen when it is entered.
 
-    Main menu state functions
+Loads the DigiPen Singapore logo and draws the team members, instructors, and executives.
 
-*/ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
+@param windowW The width of the window.
+@param windowH The height of the window.
+@return none.
+*//*________________________________________________________________________________*/
+static void DrawCreditsScreen(float windowW, float windowH)
+{
+    static const char* const teamMembers[] = {
+        "IMGD - Ggwendolynn Lee Rasni",
+        "IMGD - Isaac Tan",
+        "IMGD - Ang Xiao Hui",
+        "RTIS - Lek Kar Lim"
+    };
+
+    static const char* const instructors[] = {
+        "GERALD WONG HAN FENG",
+        "TAN CHEE WEI TOMMY",
+        "SOROOR MALEKMOHAMMADI FARADOUNBEH"
+    };
+
+    static const char* const executives[] = {
+        "CHU Jason Yeu Tat",
+        "Michael GATS",
+        "TAN Chek Ming",
+        "Prasanna Kumar GHALI",
+        "Mandy WONG",
+        "Johnny DEEK"
+    };
+
+    float scale = MenuUIScale();
+    float centerX = windowW * 0.5f;
+    float top = (windowH - 720.0f * scale) * 0.5f;
+    float leftX = centerX - 260.0f * scale;
+    float rightX = centerX + 260.0f * scale;
+    float leftY = top + 265.0f * scale;
+    float rightY = top + 265.0f * scale;
+    float mouseX, mouseY;
+
+    CP_Color white = CP_Color_Create(245, 245, 245, 255);
+    CP_Color pink = CP_Color_Create(255, 125, 145, 255);
+
+    CP_Graphics_ClearBackground(CP_Color_Create(20, 20, 25, 255));
+    CP_Settings_NoStroke();
+    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
+
+    if (fontBody != NULL)
+        CP_Font_Set(fontBody);
+
+    if (creditsLogo != NULL)
+    {
+        float logoW = (float)CP_Image_GetWidth(creditsLogo);
+        float logoH = (float)CP_Image_GetHeight(creditsLogo);
+        float fit = fminf(360.0f * scale / logoW, 100.0f * scale / logoH);
+
+        CP_Settings_ImageMode(CP_POSITION_CENTER);
+        CP_Image_Draw(creditsLogo, centerX, top + 78.0f * scale,
+            logoW * fit, logoH * fit, 255);
+    }
+    else
+    {
+        CP_Settings_TextSize(24.0f * scale);
+        CP_Settings_Fill(pink);
+        CP_Font_DrawText("DigiPen Singapore logo missing",
+            centerX, top + 78.0f * scale);
+    }
+
+    CP_Settings_Fill(white);
+    CP_Settings_TextSize(23.0f * scale);
+    CP_Font_DrawText(
+        "All content \xC2\xA9 2026 DigiPen Institute of Technology Singapore. All Rights Reserved",
+        centerX, top + 151.0f * scale
+    );
+
+    CP_Settings_Fill(pink);
+    CP_Settings_TextSize(42.0f * scale);
+    CP_Font_DrawText("CREDITS", centerX, top + 202.0f * scale);
+
+    CP_Settings_TextSize(30.0f * scale);
+    CP_Font_DrawText("Team Members", leftX, leftY);
+    leftY += 35.0f * scale;
+
+    CP_Settings_Fill(white);
+    CP_Settings_TextSize(26.0f * scale);
+    for (size_t i = 0; i < sizeof(teamMembers) / sizeof(teamMembers[0]); ++i)
+    {
+        CP_Font_DrawText(teamMembers[i], leftX, leftY);
+        leftY += 29.0f * scale;
+    }
+
+    leftY += 18.0f * scale;
+    CP_Settings_Fill(pink);
+    CP_Settings_TextSize(30.0f * scale);
+    CP_Font_DrawText("Instructors", leftX, leftY);
+    leftY += 35.0f * scale;
+
+    CP_Settings_Fill(white);
+    CP_Settings_TextSize(26.0f * scale);
+    for (size_t i = 0; i < sizeof(instructors) / sizeof(instructors[0]); ++i)
+    {
+        CP_Font_DrawText(instructors[i], leftX, leftY);
+        leftY += 29.0f * scale;
+    }
+
+    CP_Settings_Fill(pink);
+    CP_Settings_TextSize(30.0f * scale);
+    CP_Font_DrawText("President", rightX, rightY);
+    rightY += 35.0f * scale;
+
+    CP_Settings_Fill(white);
+    CP_Settings_TextSize(26.0f * scale);
+    CP_Font_DrawText("Claude Comair", rightX, rightY);
+    rightY += 47.0f * scale;
+
+    CP_Settings_Fill(pink);
+    CP_Settings_TextSize(30.0f * scale);
+    CP_Font_DrawText("Executives", rightX, rightY);
+    rightY += 35.0f * scale;
+
+    CP_Settings_Fill(white);
+    CP_Settings_TextSize(26.0f * scale);
+    for (size_t i = 0; i < sizeof(executives) / sizeof(executives[0]); ++i)
+    {
+        CP_Font_DrawText(executives[i], rightX, rightY);
+        rightY += 29.0f * scale;
+    }
+
+    Button backButton = {
+        centerX, top + 659.0f * scale,
+        200.0f * scale, 52.0f * scale, "BACK", false
+    };
+
+    GetUIMouse(&mouseX, &mouseY);
+    backButton.isHovered = IsMouseOverButton(backButton, mouseX, mouseY);
+    DrawPillButton(backButton);
+
+    if (CP_Input_KeyTriggered(KEY_ESCAPE) ||
+        (CP_Input_MouseTriggered(MOUSE_BUTTON_LEFT) && backButton.isHovered))
+    {
+        PlayMenuClick();
+        showCredits = false;
+    }
+}
 
 /*! Specification for function Main_Menu_Init:
 @brief Prepares the main menu when it is entered.
@@ -1346,6 +1513,8 @@ void Main_Menu_Init(void)
 
     showHowToModal = false;
     showOptionsModal = false;
+    showQuitConfirm = false;
+    showCredits = false;
     activeVolumeSlider = 0;
 
     floatTimer = 0.0f;
@@ -1382,24 +1551,22 @@ void Main_Menu_Init(void)
     if (menuMusic != NULL) {
         CP_Sound_PlayAdvanced(
             menuMusic,
-            1.0f,
+            0.2f,
             1.0f,
             true,
             CP_SOUND_GROUP_MUSIC
         );
     }
 
-    // title font.
-    fontTitle = CP_Font_Load(
-        "Assets/PressStart2P-Regular.ttf"
-    );
+    // credits logo.
+    creditsLogo = CP_Image_Load("Assets/DigiPen_Singapore_WEB_WHITE.png");
 
-    if (!fontTitle) {
-        fontTitle = CP_Font_Load(
-            "./Assets/PressStart2P-Regular.ttf"
-        );
+    if (creditsLogo == NULL)
+    {
+        printf("Could not load Assets/DigiPen_Singapore_WEB_WHITE.png\n");
     }
 
+    // title font.
     if (!fontTitle) {
         fontTitle = CP_Font_Load(
             "Assets/PressStart2P-Regular.ttf"
@@ -1488,13 +1655,6 @@ void Main_Menu_Init(void)
     }
 }
 
-
-/* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
-
-    Main menu update function
-
-*/ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
-
 /*! Specification for function Main_Menu_Update:
 @brief Updates and draws the main menu each frame.
 
@@ -1545,6 +1705,12 @@ void Main_Menu_Update(void)
     float windowW = (float)CP_System_GetWindowWidth();
     float windowH = (float)CP_System_GetWindowHeight();
 
+    if (showCredits)
+    {
+        DrawCreditsScreen(windowW, windowH);
+        return;
+    }
+
     float centerX = windowW / 2.0f;
     float centerY = windowH / 2.0f;
 
@@ -1573,7 +1739,7 @@ void Main_Menu_Update(void)
     // background chase, behind the title, buttons, and popups.
     DrawMenuChase(dt, windowW, windowH);
 
-	// title and subtitle: draw with a shadow and outline for better visibility.
+    // title and subtitle: draw with a shadow and outline for better visibility.
     CP_Settings_NoStroke();
 
     CP_Settings_TextAlignment(
@@ -1581,7 +1747,7 @@ void Main_Menu_Update(void)
         CP_TEXT_ALIGN_V_MIDDLE
     );
 
-	// scale the title and subtitle based on the menu UI scale, with a smaller scale for windowed mode.
+    // scale the title and subtitle based on the menu UI scale, with a smaller scale for windowed mode.
     float headingScale = MenuUIScale() * 0.65f;
 
     float titleSize = 90.0f * headingScale;
@@ -1610,7 +1776,7 @@ void Main_Menu_Update(void)
         4.0f * headingScale
     );
 
-	// main title.
+    // main title.
     DrawTextWithOutline(
         "ALLEY RUNNER",
         centerX,
@@ -1647,22 +1813,18 @@ void Main_Menu_Update(void)
     );
 
     // draw and handle normal buttons only when no popup is open.
-    if (!showHowToModal && !showOptionsModal) {
-        btnPlay.isHovered =
-            IsMouseOverButton(btnPlay, mouseX, mouseY);
+    if (!showHowToModal && !showOptionsModal && !showQuitConfirm) {
 
-        btnHowTo.isHovered =
-            IsMouseOverButton(btnHowTo, mouseX, mouseY);
-
-        btnOptions.isHovered =
-            IsMouseOverButton(btnOptions, mouseX, mouseY);
-
-        btnExit.isHovered =
-            IsMouseOverButton(btnExit, mouseX, mouseY);
+        btnPlay.isHovered = IsMouseOverButton(btnPlay, mouseX, mouseY);
+        btnHowTo.isHovered = IsMouseOverButton(btnHowTo, mouseX, mouseY);
+        btnOptions.isHovered = IsMouseOverButton(btnOptions, mouseX, mouseY);
+        btnCredits.isHovered = IsMouseOverButton(btnCredits, mouseX, mouseY);
+        btnExit.isHovered = IsMouseOverButton(btnExit, mouseX, mouseY);
 
         DrawPillButton(btnPlay);
         DrawPillButton(btnHowTo);
         DrawPillButton(btnOptions);
+        DrawPillButton(btnCredits);
         DrawPillButton(btnExit);
 
         if (
@@ -1684,13 +1846,21 @@ void Main_Menu_Update(void)
                 showOptionsModal = true;
                 activeVolumeSlider = 0;
             }
-            else if (btnExit.isHovered) {
+            else if (btnCredits.isHovered)
+            {
                 PlayMenuClick();
-
-                pendingButtonAction = 2;
-                buttonActionTimer = BUTTON_SOUND_DELAY;
+                showCredits = true;
+            }
+            else if (btnExit.isHovered)
+            {
+                PlayMenuClick();
+                showQuitConfirm = true;
             }
         }
+    }
+    else if (showQuitConfirm)
+    {
+        DrawQuitConfirmModal(centerX, centerY, windowW, windowH);
     }
     else if (showOptionsModal) {
         DrawOptionsModal(
@@ -1792,13 +1962,6 @@ void Main_Menu_Update(void)
     );
 }
 
-
-/* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
-
-    Cleanup
-
-*/ // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
-
 /*! Specification for function Main_Menu_Exit:
 @brief Cleans up the main menu when it is left.
 
@@ -1837,6 +2000,12 @@ void Main_Menu_Exit(void)
         menuBall = NULL;
     }
 
+    if (creditsLogo != NULL)
+    {
+        CP_Image_Free(creditsLogo);
+        creditsLogo = NULL;
+    }
+
     fontTitle = NULL;
     fontBody = NULL;
 
@@ -1844,7 +2013,6 @@ void Main_Menu_Exit(void)
     pendingButtonAction = 0;
     buttonActionTimer = 0.0f;
 }
-
 
 /* // ☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆ //
 
