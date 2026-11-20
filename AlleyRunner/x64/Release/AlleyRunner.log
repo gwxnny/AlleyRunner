@@ -1,10 +1,9 @@
-﻿  main.c
-  splash.c
-C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\splash.c(143,27): warning C4047: 'function': 'CP_Image' differs in levels of indirection from 'CP_Image *'
-C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\splash.c(143,27): warning C4024: 'CP_Image_Free': different types for formal and actual parameter 1
+﻿  game.c
+C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(3671,23): warning C4047: 'function': 'CP_Image' differs in levels of indirection from 'CP_Image *'
+C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(3671,23): warning C4024: 'CP_Image_Free': different types for formal and actual parameter 1
   Generating code
-  1 of 90 functions ( 1.1%) were compiled, the rest were copied from previous compilation.
+  7 of 95 functions ( 7.4%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    3 functions had inline decision re-evaluated but remain unchanged
+    2 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
-  AlleyRunner.vcxproj -> C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\x64\Release\AlleyRunner.exe
+  AlleyRunner.vcxproj -> C:\Users\isaac\Documents\GitHub\AlleyRunner\x64\Release\AlleyRunner.exe
