@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 
+
 /* UI FIX: map the native client-area mouse position to drawing coordinates. */
 static void GetUIMouse(float* x, float* y)
 {
@@ -64,7 +65,7 @@ static CP_Sound sndMultiplier = NULL;
 
 #define JUMP_VOL  0.5f
 #define DEATH_VOL 1.0f
-#define COIN_VOL 1.0f
+#define COIN_VOL 1.5f
 
 /* ============================================================
    Gameplay settings
@@ -117,10 +118,10 @@ static float gameScale = 1.0f;
 #define INVINCIBLE_ANIM_SCALE 1.35f
 #define INVINCIBLE_FEET_FRAC  0.88f
 #define SHIELD_TIME     10.0f
-#define MAGNET_TIME     8.0f
+#define MAGNET_TIME     16.0f
 
-#define PU_SPAWN_MIN    8.0f /* seconds between power-up pickups */
-#define PU_SPAWN_MAX    15.0f
+#define PU_SPAWN_MIN    28.0f /* seconds between power-up pickups */
+#define PU_SPAWN_MAX    56.0f
 #define PU_SIZE         70.0f
 #define PU_PICKUP_DIST  60.0f
 #define PU_FX_SIZE      190.0f /* height of the effect drawn on the pin */
@@ -216,7 +217,15 @@ static float reviveAnimTimer = 0.0f;
 #define pause_quit_y      (WIN_H * 0.65f)
 #define PAUSE_BTN_W       (460.0f * HUD_SCALE)
 
+// Confirmation button
+#define CONFIRM_BTN_W   (300.0f * HUD_SCALE)
+#define CONFIRM_GAP     (40.0f * HUD_SCALE)
+#define confirm_btn_y   (WIN_H * 0.70f)
+#define confirm_yes_x   (window_center_x - (CONFIRM_BTN_W + CONFIRM_GAP) * 0.5f)
+#define confirm_no_x    (window_center_x + (CONFIRM_BTN_W + CONFIRM_GAP) * 0.5f)
+
 int is_paused = 0;
+int show_confirm_quit = 0;
 
 /* [ADDED BY LEKKAR] Heart pickup settings and sound */
 //Hearts Spawn
@@ -226,7 +235,7 @@ int is_paused = 0;
 #define HEART_PICKUP_DIST 60.0f   /* collect distance */
 #define HEART_FIRST_DELAY_MIN 3.0f   /* seconds after losing a heart */
 #define HEART_FIRST_DELAY_MAX 6.0f
-#define HEART_VOL 0.8f
+#define HEART_VOL 0.4f
 
 static CP_Sound sndHeart = NULL;
 
@@ -234,8 +243,8 @@ static CP_Sound sndHeart = NULL;
    Rage overlay
    ============================================================ */
 
-// stored font for the rage overlay text, 
-// game_init() loads it once and keeps it in memory for the rest of the game.
+   // stored font for the rage overlay text, 
+   // game_init() loads it once and keeps it in memory for the rest of the game.
 static CP_Font rageFont = NULL;
 
 #define RAGE_QUIET_MIN_MS 6000 // minimum wait: 6 seconds
@@ -357,6 +366,7 @@ static GameplayPhase state;
 
 /* Background and scoreboard. */
 static CP_Image bgImage = NULL;
+static float bgScroll = 0.0f;   /* how far the background has scrolled, in pixels */
 static CP_Image borderImage = NULL;
 
 static CP_Image hudCoinImage = NULL;
@@ -714,7 +724,7 @@ int Game_GetHighScore(void)
 void StartRun(void)
 {
     state = STATE_PLAYING;
-	enemyGround = PinFeetY(1); // set the initial ball ground position explicitly to the middle lane.
+    enemyGround = PinFeetY(1); // set the initial ball ground position explicitly to the middle lane.
     reviveAnimTimer = 0.0f;
 
     runSurvivalSeconds = 0.0f;  // start this run's timer at zero.
@@ -734,6 +744,8 @@ void StartRun(void)
     shieldTimer = 0.0f;
     magnetTimer = 0.0f;
     coinCount = 0;
+
+    bgScroll = 0.0f;
 
     pu_active = false;
     puSpawnTimer = CP_Random_RangeFloat(PU_SPAWN_MIN, PU_SPAWN_MAX);
@@ -907,7 +919,7 @@ static void StartRoulette(int type)
 {
     rouletteType = type;
     rouletteTimer = ROULETTE_TIME;
-    CP_Sound_PlayAdvanced(sndRouletteSpin, 1.0f, 1.0f, false, CP_SOUND_GROUP_SFX);
+    CP_Sound_PlayAdvanced(sndRouletteSpin, 1.5f, 1.0f, false, CP_SOUND_GROUP_SFX);
     rouletteSwitch = 0.0f;
     rouletteShown = CP_Random_RangeInt(0, NUM_POWERUPS - 1);
     revealTimer = 0.0f;
@@ -1631,9 +1643,9 @@ static void Draw_HUD(void)
         70.0f * s,
         white
     );
-	 // hearts remain in their own panel, drawn by Draw_Hearts(). panel ends at x = 472 * s.
+    // hearts remain in their own panel, drawn by Draw_Hearts(). panel ends at x = 472 * s.
 
-     /* ==================== DISTANCE ==================== */
+    /* ==================== DISTANCE ==================== */
 
     float distanceX = WIN_W - 153.0f * s;
 
@@ -1744,7 +1756,7 @@ static void Draw_HUD(void)
                 effectPanelWidth * 0.5f +
                 (float)i * (effectPanelWidth + panelGap);
 
-			// shorten the name if multiple effects are active, to fit the panel.
+            // shorten the name if multiple effects are active, to fit the panel.
             switch (type)
             {
             case PU_INVINCIBLE:
@@ -1778,14 +1790,14 @@ static void Draw_HUD(void)
                 0
             );
 
-			// how much space is left for text after the padding on both sides of the panel?
+            // how much space is left for text after the padding on both sides of the panel?
             float padding = 14.0f * s;
             float availableWidth =
                 fmaxf(1.0f, effectPanelWidth - 2.0f * padding);
 
             float textSize = 23.0f * s;
 
-			// reduce the text size if the name + countdown + gap is too wide for the panel.
+            // reduce the text size if the name + countdown + gap is too wide for the panel.
             float characterSlots =
                 (float)strlen(effectName) +
                 (float)strlen(secondsText) +
@@ -1811,7 +1823,7 @@ static void Draw_HUD(void)
 
             CP_Settings_TextSize(textSize);
 
-			// draw the name in the power-up's colour, on the left side of the panel.
+            // draw the name in the power-up's colour, on the left side of the panel.
             CP_Settings_TextAlignment(
                 CP_TEXT_ALIGN_H_LEFT,
                 CP_TEXT_ALIGN_V_MIDDLE
@@ -1825,7 +1837,7 @@ static void Draw_HUD(void)
                 y
             );
 
-			// draw the countdown in white, on the right side of the panel.
+            // draw the countdown in white, on the right side of the panel.
             CP_Settings_Fill(
                 CP_Color_Create(245, 245, 245, 255)
             );
@@ -2090,15 +2102,14 @@ void Game_Init(void)
     /*Score Borders*/
     borderImage = CP_Image_Load("Assets/background.png");
 
-
     /* Gameplay audio. */
     sndJump = CP_Sound_Load("Assets/jump.mp3");
     sndCoin = CP_Sound_Load("Assets/coin_pickup.mp3");
     sndDeath = CP_Sound_Load("Assets/game_over.mp3");
     gameMusic = CP_Sound_Load("Assets/bg_music.mp3");
-    sndHit = CP_Sound_Load("Assets/edr-video-game-hit-noise-001-135821.mp3");
-    sndRouletteSpin = CP_Sound_Load("Assets/roulette_spin.wav");
-    sndRouletteReveal = CP_Sound_Load("Assets/roulette_reveal.wav");
+    sndHit = CP_Sound_Load("Assets/taking_dmg.mp3");
+    sndRouletteSpin = CP_Sound_Load("Assets/roulette_spin_natural_speed_1_5s.mp3");
+    sndRouletteReveal = CP_Sound_Load("Assets/roulette_reveal_2.mp3");
     sndMultiplier = CP_Sound_Load("Assets/multiplier_sound.mp3");
 
     // [ADDED BY LEKKAR] Load heart pickup sound
@@ -2112,9 +2123,9 @@ void Game_Init(void)
     // Updated character sprite sheets.
     Anim_Init(&runAnim, "Assets/bowling_pin_running.png", 4, PLAYER_W, PLAYER_H, 0.15f, 1);
     Anim_Init(&chaseAnim, "Assets/bowling_ball_chasing.png", 8, ENEMY_W, ENEMY_H, 0.15f, 1);
-    Anim_Init(&grabAnim, "Assets/pin_death_by_ball.png", 7, 1000.0f, 500.0f, DEATH_FRAME_TIME, 0 );
+    Anim_Init(&grabAnim, "Assets/pin_death_by_ball.png", 7, 1000.0f, 500.0f, DEATH_FRAME_TIME, 0);
 
-	/* scale character display sizes with the game window */
+    /* scale character display sizes with the game window */
     Anim_SetDrawSize(&runAnim, 120.0f, 120.0f);
     Anim_SetDrawSize(&chaseAnim, 500.0f, 500.0f);
     Anim_SetDrawSize(&grabAnim, 1000.0f, 500.0f);
@@ -2289,6 +2300,7 @@ void Game_Init(void)
     font_loaded = 1;
     show_death_screen = 0; // death screen is hidden hence 0
     is_paused = 0;
+    show_confirm_quit = 0;
 
     //Health Bar
     lives = max_lives;
@@ -2309,14 +2321,14 @@ static void Draw_World(void)
 
     if (bgImage != NULL)
     {
-        CP_Image_Draw(
-            bgImage,
-            (float)width / 2.0f,
-            (float)height / 2.0f,
-            (float)width,
-            (float)height,
-            255
-        );
+        float w = (float)width;
+        float h = (float)height;
+
+        /* copy 1: slides off to the left */
+        CP_Image_Draw(bgImage, w / 2.0f - bgScroll, h / 2.0f, w + 2.0f, h, 255);
+
+        /* copy 2: follows right behind it, fills the gap */
+        CP_Image_Draw(bgImage, w / 2.0f - bgScroll + w, h / 2.0f, w + 2.0f, h, 255);
     }
 
     for (int i = 0; i < MAX_OBS; i++)
@@ -2395,7 +2407,7 @@ static void Draw_World(void)
             Draw_PowerFx(PU_INVINCIBLE, player_x, auraY);   /* circle fallback */
         }
 
-		if (magnetTimer > 0.0f && // draw the magnet effect circle behind the pin if the animation is missing
+        if (magnetTimer > 0.0f && // draw the magnet effect circle behind the pin if the animation is missing
             puFx[PU_MAGNET].sheet == NULL)
         {
             Draw_PowerFx(PU_MAGNET, player_x, auraY);
@@ -2977,22 +2989,70 @@ void DrawPauseButton(void)
 /* ============================================================
    Pause Menu
    ============================================================ */
+   /* Dim the whole scene, then draw a rounded panel with a border, centred on screen. */
+static void DrawMenuPanel(float panelW, float panelH)
+{
+    /* 1. dim everything behind the menu */
+    CP_Settings_NoStroke();
+    CP_Settings_RectMode(CP_POSITION_CORNER);
+    CP_Settings_Fill(CP_Color_Create(0, 0, 0, 160));
+    CP_Graphics_DrawRect(0, 0, WIN_W, WIN_H);
+
+    /* 2. the panel itself */
+    CP_Settings_RectMode(CP_POSITION_CENTER);
+    CP_Settings_Stroke(CP_Color_Create(255, 230, 230, 255));
+    CP_Settings_StrokeWeight(4.0f * HUD_SCALE);
+    CP_Settings_Fill(CP_Color_Create(25, 15, 20, 240));
+    CP_Graphics_DrawRectAdvanced(window_center_x, WIN_H * 0.5f, panelW, panelH, 0.0f, 24.0f * HUD_SCALE);
+    CP_Settings_NoStroke();
+}
+
+/* Title with a drop shadow. */
+static void DrawMenuTitle(const char* text, float y)
+{
+    float off = 4.0f * HUD_SCALE;
+    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
+    CP_Settings_TextSize(WIN_H * 0.08f);
+    CP_Settings_Fill(CP_Color_Create(0, 0, 0, 255));
+    CP_Font_DrawText(text, window_center_x + off, y + off);
+    CP_Settings_Fill(CP_Color_Create(255, 230, 230, 255));
+    CP_Font_DrawText(text, window_center_x, y);
+}
+
 void PauseMenu_Draw(void)
 {
     CP_Font_Set(pixel_font);
-    CP_Settings_RectMode(CP_POSITION_CORNER);
-    CP_Settings_Fill(CP_Color_Create(0, 0, 0, 150));
-    CP_Graphics_DrawRect(0, 0, WIN_W, WIN_H);
-
-    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-    CP_Settings_TextSize(WIN_H * 0.08f);
-    CP_Settings_Fill(CP_Color_Create(255, 230, 230, 255));
-    CP_Font_DrawText("PAUSED", window_center_x, WIN_H * 0.28f);
+    DrawMenuPanel(PAUSE_BTN_W + 160.0f * HUD_SCALE, WIN_H * 0.56f);
+    DrawMenuTitle("PAUSED", WIN_H * 0.32f);
 
     DrawPillButtonAt(window_center_x, pause_resume_y, PAUSE_BTN_W, BTN_H, "RESUME (SPACE)",
         GameMouseInButton(window_center_x, pause_resume_y, PAUSE_BTN_W, BTN_H));
-    DrawPillButtonAt(window_center_x, pause_quit_y, PAUSE_BTN_W, BTN_H, "QUIT (Q)",
+    DrawPillButtonAt(window_center_x, pause_quit_y, PAUSE_BTN_W, BTN_H, "MAIN MENU (Q)",
         GameMouseInButton(window_center_x, pause_quit_y, PAUSE_BTN_W, BTN_H));
+
+    CP_Settings_RectMode(CP_POSITION_CORNER);
+}
+
+void ConfirmationMenu_Draw(void)
+{
+
+    CP_Font_Set(pixel_font);
+    DrawMenuPanel(2.0f * CONFIRM_BTN_W + CONFIRM_GAP + 120.0f * HUD_SCALE, WIN_H * 0.66f);
+    DrawMenuTitle("QUIT", WIN_H * 0.27f);
+
+    CP_Font_Set(rageFont);
+    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
+    CP_Settings_TextSize(WIN_H * 0.08f);
+    CP_Settings_Fill(CP_Color_Create(255, 230, 230, 255));
+    CP_Font_DrawText("ARE YOU SURE YOU WANNA QUIT?", window_center_x, WIN_H * 0.48f);
+    //CP_Font_DrawText("YOU WANNA QUIT?", window_center_x, WIN_H * 0.51f);
+
+    DrawPillButtonAt(confirm_yes_x, confirm_btn_y, CONFIRM_BTN_W, BTN_H, "YES",
+        GameMouseInButton(confirm_yes_x, confirm_btn_y, CONFIRM_BTN_W, BTN_H));
+    DrawPillButtonAt(confirm_no_x, confirm_btn_y, CONFIRM_BTN_W, BTN_H, "NO",
+        GameMouseInButton(confirm_no_x, confirm_btn_y, CONFIRM_BTN_W, BTN_H));
+
+    CP_Settings_RectMode(CP_POSITION_CORNER);
 }
 
 /* ============================================================
@@ -3079,15 +3139,28 @@ void Game_Update(void)
             }
             else if (is_paused)
             {
-                if (GameMouseInButton(window_center_x, pause_resume_y, PAUSE_BTN_W, BTN_H))
+                if (show_confirm_quit)
                 {
-                    SetPaused(0);
+                    if (GameMouseInButton(confirm_yes_x, confirm_btn_y, CONFIRM_BTN_W, BTN_H))        // YES
+                    {
+                        CP_Engine_SetNextGameStateForced(Main_Menu_Init, Main_Menu_Update, Main_Menu_Exit);
+                        return;
+                    }
+                    else if (GameMouseInButton(confirm_no_x, confirm_btn_y, CONFIRM_BTN_W, BTN_H))     // NO
+                    {
+                        show_confirm_quit = 0;
+                    }
                 }
-                else if (GameMouseInButton(window_center_x, pause_quit_y, PAUSE_BTN_W, BTN_H))
+                else
                 {
-                    CP_Engine_SetNextGameStateForced(
-                        Main_Menu_Init, Main_Menu_Update, Main_Menu_Exit);
-                    return;
+                    if (GameMouseInButton(window_center_x, pause_resume_y, PAUSE_BTN_W, BTN_H))        // RESUME
+                    {
+                        SetPaused(0);
+                    }
+                    else if (GameMouseInButton(window_center_x, pause_quit_y, PAUSE_BTN_W, BTN_H))     // QUIT
+                    {
+                        show_confirm_quit = 1;
+                    }
                 }
             }
         }
@@ -3098,6 +3171,7 @@ void Game_Update(void)
     {
         /* paused: nothing in the world updates */
     }
+
     else if (state == STATE_PLAYING)
     {
         runSurvivalSeconds += dt;  // excludes pause time and death animations.
@@ -3168,6 +3242,10 @@ void Game_Update(void)
             else
                 speed_mult = slow_factor + (1.0f - slow_factor) * (1.0f - frac / hold_end);   // recovery
         }
+        /* Background scrolls at the same speed as the obstacles. */
+        bgScroll += speed * gameScale * speed_mult * dt;
+        bgScroll = fmodf(bgScroll, (float)width);   /* wrap so it loops */
+
         /* Move and respawn obstacles. */
         for (int i = 0; i < MAX_OBS; i++)
         {
@@ -3217,7 +3295,7 @@ void Game_Update(void)
                 reviveAnimTimer -= dt;
 
             Anim_Update(&coinAnim);
-            
+
 
             /* Item roulette: icons spin, slow down, then land on the real power-up. */
             if (rouletteTimer > 0.0f)
@@ -3231,7 +3309,7 @@ void Game_Update(void)
                     rouletteShown = rouletteType;
                     ApplyPowerUp(rouletteType);
                     revealTimer = REVEAL_TIME;
-                    CP_Sound_PlayAdvanced(sndRouletteReveal, 1.0f, 1.0f, false, CP_SOUND_GROUP_SFX);
+                    CP_Sound_PlayAdvanced(sndRouletteReveal, 1.5f, 1.0f, false, CP_SOUND_GROUP_SFX);
                 }
                 else if (rouletteSwitch <= 0.0f)
                 {
@@ -3413,7 +3491,7 @@ void Game_Update(void)
                     {
                         scoreMultiplier++;
                     }
-                    CP_Sound_PlayAdvanced(sndMultiplier, 0.6f, 1.0f, false, CP_SOUND_GROUP_SFX);
+                    CP_Sound_PlayAdvanced(sndMultiplier, 0.4f, 1.0f, false, CP_SOUND_GROUP_SFX);
                 }
                 else if (multiplier_x < -50.0f * gameScale)
                 {
@@ -3474,6 +3552,20 @@ void Game_Update(void)
     }
 
     Draw_World();
+    Draw_Hearts();
+
+    if (!is_paused && !show_death_screen)
+    {
+        DrawPauseButton();
+    }
+
+    if (is_paused)
+    {
+        if (show_confirm_quit)
+            ConfirmationMenu_Draw();
+        else
+            PauseMenu_Draw();
+    }
 
     // Draw overlay over the gameplay.
     if (state == STATE_PLAYING)
@@ -3521,17 +3613,9 @@ void Game_Update(void)
         }
     }
 
-    Draw_Hearts();
 
-    if (!is_paused && !show_death_screen)
-    {
-        DrawPauseButton();
-    }
 
-    if (is_paused)
-    {
-        PauseMenu_Draw();
-    }
+
 
     /* Drawn last so it sits on top of everything. */
     if (show_death_screen)
@@ -3548,6 +3632,9 @@ void Game_Update(void)
 void Game_Exit(void)
 {
     CP_Sound_StopAll();
+    CP_Sound_ResumeGroup(CP_SOUND_GROUP_MUSIC);
+    is_paused = 0;
+    show_confirm_quit = 0;
 
     if (sndJump != NULL)
     {
@@ -3577,6 +3664,12 @@ void Game_Exit(void)
     {
         CP_Image_Free(bgImage);
         bgImage = NULL;
+    }
+
+    if (borderImage != NULL)
+    {
+        CP_Image_Free(&borderImage);
+        borderImage = NULL;
     }
 
     // [ADDED BY LEKKAR] Free heart pickup resources
