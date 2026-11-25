@@ -1,54 +1,108 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    <Filter Include="Core">
+      <UniqueIdentifier>{C296AFC9-158F-513B-AF7B-DF7EF56C03C2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    <Filter Include="Data">
+      <UniqueIdentifier>{07F549DF-2831-512A-AC88-12D6953B1978}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    <Filter Include="Gameplay">
+      <UniqueIdentifier>{F63D60D1-56EB-5D7D-87F6-55743CBF4994}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Gameplay\UI">
+      <UniqueIdentifier>{D211581B-88BE-5256-B0E9-E528DF309C77}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="States">
+      <UniqueIdentifier>{69AFB153-6700-5DE8-BEA5-B203BC474DA7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Tools">
+      <UniqueIdentifier>{CCBC81DF-12F6-5E35-AC37-89FC822AAFE9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI">
+      <UniqueIdentifier>{E786D3C1-4697-5FEA-AEA3-0A57537A0A57}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\game.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\splash.h">
+      <Filter>States</Filter>
     </ClInclude>
     <ClInclude Include="..\mainmenu.h">
-      <Filter>Header Files</Filter>
+      <Filter>States</Filter>
     </ClInclude>
-    <ClInclude Include="..\utils.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\game.h">
+      <Filter>States</Filter>
     </ClInclude>
-    <ClInclude Include="..\telemetry.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\game_types.h">
+      <Filter>Gameplay</Filter>
     </ClInclude>
-    <ClInclude Include="..\splash.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\game_menus.h">
+      <Filter>Gameplay\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\hud.h">
+      <Filter>Gameplay\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\animation.h">
+      <Filter>Gameplay</Filter>
+    </ClInclude>
+    <ClInclude Include="..\rage_overlay.h">
+      <Filter>Gameplay</Filter>
+    </ClInclude>
+    <ClInclude Include="..\transition.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\ui.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tuning.h">
+      <Filter>Tools</Filter>
+    </ClInclude>
+    <ClInclude Include="..\debug_tools.h">
+      <Filter>Tools</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\game.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\main.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\mainmenu.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\utils.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\telemetry.c">
-      <Filter>Source Files</Filter>
+      <Filter>Core</Filter>
     </ClCompile>
     <ClCompile Include="..\splash.c">
-      <Filter>Source Files</Filter>
+      <Filter>States</Filter>
     </ClCompile>
+    <ClCompile Include="..\mainmenu.c">
+      <Filter>States</Filter>
+    </ClCompile>
+    <ClCompile Include="..\game.c">
+      <Filter>States</Filter>
+    </ClCompile>
+    <ClCompile Include="..\game_menus.c">
+      <Filter>Gameplay\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\hud.c">
+      <Filter>Gameplay\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\animation.c">
+      <Filter>Gameplay</Filter>
+    </ClCompile>
+    <ClCompile Include="..\rage_overlay.c">
+      <Filter>Gameplay</Filter>
+    </ClCompile>
+    <ClCompile Include="..\transition.c">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ui.c">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tuning.c">
+      <Filter>Tools</Filter>
+    </ClCompile>
+    <ClCompile Include="..\debug_tools.c">
+      <Filter>Tools</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\Assets\Data\gameplay_tuning.txt">
+      <Filter>Data</Filter>
+    </Text>
+    <None Include="..\README.md" />
   </ItemGroup>
 </Project>
