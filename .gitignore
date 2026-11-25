@@ -1,1 +1,21 @@
+# Visual Studio and build output (never submit these)
 .vs/
+x64/
+Win32/
+Debug/
+Release/
+*.ipch
+*.suo
+*.user
+*.db
+*.pdb
+*.ilk
+*.obj
+*.idb
+*.iobj
+*.ipdb
+*.exp
+*.tlog
+*.log
+*.recipe
+*.exe

@@ -1,2 +1,17 @@
-﻿  game.c
-  AlleyRunner.vcxproj -> C:\Users\isaac\Documents\GitHub\AlleyRunner\x64\Debug\AlleyRunner.exe
+﻿  main.c
+  splash.c
+  mainmenu.c
+  game.c
+  game_menus.c
+  hud.c
+  animation.c
+  rage_overlay.c
+  transition.c
+  ui.c
+  tuning.c
+  debug_tools.c
+  Generating Code...
+  AlleyRunner.vcxproj -> C:\Users\ggkio\Downloads\IsaacACat_AlleyRunner_FINAL_SUBMISSION\IsaacACat_AlleyRunner\SOURCE\AlleyRunner\x64\Debug\AlleyRunner.exe
+  Copying CProcessing DLLs and the Assets folder next to the executable
+  0 File(s) copied
+  0 File(s) copied

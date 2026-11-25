@@ -1,0 +1,22 @@
+# Alley Runner gameplay tuning.
+# Edit and save this file while the game is running: changes load automatically.
+# Or press F7 in a run to use the in-game editor (F8 saves here).
+
+start_speed            = 600    # Start speed (100 to 2000)
+speed_ramp             = 5    # Speed gain / sec (0 to 50)
+obstacle_spacing       = 450    # Obstacle spacing (200 to 1500)
+coin_spawn_min         = 3    # Coin spawn min (s) (0.5 to 30)
+coin_spawn_max         = 6    # Coin spawn max (s) (0.5 to 30)
+powerup_spawn_min      = 28    # Mystery box min (s) (1 to 120)
+powerup_spawn_max      = 56    # Mystery box max (s) (1 to 120)
+heart_spawn_min        = 5    # Heart spawn min (s) (1 to 60)
+heart_spawn_max        = 8    # Heart spawn max (s) (1 to 60)
+multiplier_spawn_min   = 20    # Multiplier min (s) (1 to 120)
+multiplier_spawn_max   = 50    # Multiplier max (s) (1 to 120)
+invincible_time        = 5    # Invincible time (s) (0.5 to 30)
+shield_time            = 10    # Shield time (s) (0.5 to 30)
+magnet_time            = 16    # Magnet time (s) (0.5 to 30)
+magnet_range           = 450    # Magnet range (50 to 1500)
+rage_quiet_min         = 6    # Rage quiet min (s) (1 to 120)
+rage_quiet_max         = 22    # Rage quiet max (s) (1 to 120)
+rage_duration          = 6    # Rage duration (s) (0.5 to 20)

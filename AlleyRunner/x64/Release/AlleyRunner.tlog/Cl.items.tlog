@@ -1,4 +1,12 @@
-C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c;C:\Users\isaac\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\game.obj
-C:\Users\isaac\Documents\GitHub\AlleyRunner\main.c;C:\Users\isaac\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\main.obj
-C:\Users\isaac\Documents\GitHub\AlleyRunner\mainmenu.c;C:\Users\isaac\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\mainmenu.obj
-C:\Users\isaac\Documents\GitHub\AlleyRunner\utils.c;C:\Users\isaac\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\utils.obj
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\main.c;C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\main.obj
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\splash.c;C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\splash.obj
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\mainmenu.c;C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\mainmenu.obj
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\game.c;C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\game.obj
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\game_menus.c;C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\game_menus.obj
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\hud.c;C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\hud.obj
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\animation.c;C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\animation.obj
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\rage_overlay.c;C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\rage_overlay.obj
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\transition.c;C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\transition.obj
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\ui.c;C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\ui.obj
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\tuning.c;C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\tuning.obj
+C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\debug_tools.c;C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\AlleyRunner\x64\Release\debug_tools.obj
