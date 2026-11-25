@@ -1,33 +1,19 @@
 /*!
 @file       : mainmenu.h
+@author     : Ggwendolynn Lee Rasni (ggwendolynnlee.r@digipen.edu)
 @team       : IsaacACat
 @module     : CSD1401 Software Engineering Project 1
-@section    : section b
-@project    : Team Project 1 - Alley Runner
-@brief      : This file contains the interface for the main menu state for the Alley Runner.
+@section    : B
+@project    : Alley Runner
+@brief      : Main menu game state (Play, How To Play, Settings, Credits, Quit).
+
+All content © 2026 DigiPen Institute of Technology Singapore. All Rights Reserved.
 *//*________________________________________________________________________________*/
 #ifndef MAINMENU_H
 #define MAINMENU_H
 
-#include "cprocessing.h"
+void MainMenu_Init(void);
+void MainMenu_Update(void);
+void MainMenu_Exit(void);
 
-// screen/states in Alley Runner.
-typedef enum {
-    STATE_MAIN_MENU,
-    STATE_GAMEPLAY,
-    STATE_PAUSE,
-    STATE_DEATH,
-    STATE_EXIT
-} GameState;
-
-// main menu state functions.
-void Main_Menu_Init(void);
-void Main_Menu_Update(void);
-void Main_Menu_Exit(void);
-
-// get and change the current state of the game.
-GameState Main_Menu_GetNextState(void);
-void Main_Menu_SetState(GameState state);
-int Main_Menu_IsFullscreenMode(void);
-
-#endif // MAINMENU_H
+#endif /* MAINMENU_H */

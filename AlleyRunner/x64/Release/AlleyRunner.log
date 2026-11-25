@@ -1,9 +1,21 @@
-﻿  game.c
-C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(3671,23): warning C4047: 'function': 'CP_Image' differs in levels of indirection from 'CP_Image *'
-C:\Users\isaac\Documents\GitHub\AlleyRunner\game.c(3671,23): warning C4024: 'CP_Image_Free': different types for formal and actual parameter 1
+﻿  main.c
+  splash.c
+  mainmenu.c
+  game.c
+  game_menus.c
+  hud.c
+  animation.c
+  rage_overlay.c
+  transition.c
+  ui.c
+  tuning.c
+  debug_tools.c
   Generating code
-  7 of 95 functions ( 7.4%) were compiled, the rest were copied from previous compilation.
+  172 of 173 functions (99.4%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    2 functions had inline decision re-evaluated but remain unchanged
+    0 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
-  AlleyRunner.vcxproj -> C:\Users\isaac\Documents\GitHub\AlleyRunner\x64\Release\AlleyRunner.exe
+  AlleyRunner.vcxproj -> C:\Users\ggkio\OneDrive\Documents\GitHub\AlleyRunner\x64\Release\AlleyRunner.exe
+  Copying CProcessing DLLs and the Assets folder next to the executable
+  0 File(s) copied
+  0 File(s) copied
