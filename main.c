@@ -1,29 +1,57 @@
-//---------------------------------------------------------
-// file:	main.c
-// author:	IsaacACat
-// email:	isaacd.tan@digipen.edu
-//          ggwendolynnlee.r@digipen.edu
-//          lekkar.lim@digipen.edu
-//          a.xiaohui@digipen.edu
-//
-// brief:	Main entry point for the sample project
-//			of the CProcessing library
-//
-// Copyright © 2026 DigiPen, All rights reserved.
-//---------------------------------------------------------
-#include "cprocessing.h"
-#include "mainmenu.h"
-#include "splash.h"
-#include <stdio.h>
+/*!
+@file       : main.c
+@author     : Isaac Tan (isaacd.tan@digipen.edu)
+@team       : IsaacACat
+              Isaac Tan (isaacd.tan@digipen.edu)
+              Ggwendolynn Lee Rasni (ggwendolynnlee.r@digipen.edu)
+              Lek Kar Lim (lekkar.lim@digipen.edu)
+              Ang Xiao Hui (a.xiaohui@digipen.edu)
+@module     : CSD1401 Software Engineering Project 1
+@section    : B
+@project    : Alley Runner
+@brief      : Program entry point. Opens a 1600 x 900 window, registers the
+              screen transitions and starts on the splash screen.
 
-int main(void) {
-	CP_Engine_SetNextGameState(Splash_Init, Splash_Update, Splash_Exit); // set the initial game state to the splash screen
-    // main() the starting point for the program
-    // CP_Engine_SetNextGameState() tells CProcessing which functions to use for init, update and exit
-    //// CP_Engine_Run() is the core function that starts the simulation
-    //CP_Engine_SetNextGameState(Main_Menu_Init, Main_Menu_Update, Main_Menu_Exit);
-    CP_System_SetWindowSize(1600, 900);
-    CP_Engine_Run(0);
+All content © 2026 DigiPen Institute of Technology Singapore. All Rights Reserved.
+*//*________________________________________________________________________________*/
+
+// memory leak detection in debug builds
+#ifdef _DEBUG
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#endif
+
+#include "cprocessing.h"
+#include "splash.h"
+#include "transition.h"
+
+#define WINDOW_WIDTH  1600
+#define WINDOW_HEIGHT 900
+
+/*! Specification for function main:
+@brief Program entry point.
+
+Turns on memory leak checking in Debug builds, opens a 1600 x 900 window,
+registers the screen transitions and starts on the splash screen.
+
+@param none.
+@return 0 when the program closes.
+*//*________________________________________________________________________________*/
+int main(void)
+{
+#ifdef _DEBUG
+    _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+#endif
+
+    CP_System_SetWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+    CP_System_SetWindowTitle("Alley Runner");
+
+    /* Every state change fades through black (see transition.c). */
+    Transition_Init();
+
+    CP_Engine_SetNextGameState(Splash_Init, Splash_Update, Splash_Exit);
+    CP_Engine_Run(0);   /* 0 = no console window */
 
     return 0;
 }
