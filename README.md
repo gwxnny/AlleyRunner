@@ -1,7 +1,7 @@
 # Alley Runner [By IsaacACat]
 
 
-https://github.com/user-attachments/assets/05ddfdb2-cb7c-4e6d-9c10-1318debda937
+https://github.com/user-attachments/assets/5002a311-9333-4d35-bb30-2b9ee957dfbc
 
 
 A three-lane endless runner where you play a bowling pin running for its life from a giant bowling ball. The alley keeps speeding up, the hazards keep coming, and every reward sits in a lane that makes you take a risk to grab it.
